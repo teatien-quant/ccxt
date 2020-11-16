@@ -309,11 +309,12 @@ module.exports = class binance extends Exchange {
                         'depth',
                         'trades',
                         'ticker/24hr',
-                    ]
+                    ],
                 },
                 'dapiPrivate': {
                     'get': [
                         'order',
+                        'allOrders',
                         'userTrades',
                     ],
                     'post': [
@@ -322,8 +323,8 @@ module.exports = class binance extends Exchange {
                     'delete': [
                         'order',
                         'batchOrders',
-                    ]
-                }
+                    ],
+                },
             },
             'fees': {
                 'trading': {
@@ -354,7 +355,7 @@ module.exports = class binance extends Exchange {
                     'limit': 'RESULT', // we change it from 'ACK' by default to 'RESULT'
                 },
                 'quoteOrderQty': true, // whether market orders support amounts in quote currency
-                'fetchMarkets': ['spot', 'future_usdt', 'future']
+                'fetchMarkets': ['spot', 'future_usdt', 'future'],
             },
             // https://binance-docs.github.io/apidocs/spot/en/#error-codes-2
             'exceptions': {
@@ -543,7 +544,7 @@ module.exports = class binance extends Exchange {
             const quoteId = this.safeString (market, 'quoteAsset');
             const base = this.safeCurrencyCode (baseId);
             const quote = this.safeCurrencyCode (quoteId);
-            let symbol;
+            let symbol = '';
             if (type === 'future') {
                 symbol = id;
             } else if (type === 'future_usdt') {
@@ -551,7 +552,6 @@ module.exports = class binance extends Exchange {
             } else {
                 symbol = base + '/' + quote;
             }
-            
             const filters = this.safeValue (market, 'filters', []);
             const filtersByType = this.indexBy (filters, 'filterType');
             const precision = {
@@ -788,7 +788,6 @@ module.exports = class binance extends Exchange {
         } else {
             method = 'publicGetDepth';
         }
-        
         const response = await this[method] (this.extend (request, params));
         const orderbook = this.parseOrderBook (response);
         orderbook['nonce'] = this.safeInteger (response, 'lastUpdateId');
@@ -846,7 +845,7 @@ module.exports = class binance extends Exchange {
     async fetchTicker (symbol, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
-        const type = market['type']
+        const type = market['type'];
         const request = {
             'symbol': market['id'],
         };
@@ -856,7 +855,6 @@ module.exports = class binance extends Exchange {
         } else if (type === 'future_usdt') {
             method = 'fapiPublicGetTicker24hr';
         }
-        
         const response = await this[method] (this.extend (request, params));
         return this.parseTicker (response, market);
     }
@@ -930,7 +928,7 @@ module.exports = class binance extends Exchange {
         if (market['type'] === 'future_usdt') {
             method = 'fapiPublicGetKlines';
         } else if (market['type'] === 'future') {
-            method = 'dapiPublicGetKlines'
+            method = 'dapiPublicGetKlines';
         }
         const response = await this[method] (this.extend (request, params));
         //
@@ -1091,7 +1089,6 @@ module.exports = class binance extends Exchange {
         } else {
             method = 'PublicGetTrades';
         }
-        
         if (limit !== undefined) {
             request['limit'] = limit; // default = 500, maximum = 1000
         }
@@ -1445,7 +1442,7 @@ module.exports = class binance extends Exchange {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const defaultType = this.safeString2 (this.options, 'fetchOrder', 'defaultType', market['type']);
-        const type = this.safeString (params, 'type', defaultType);
+        const type = this.safeString (market, 'type', defaultType);
         let method = 'privateGetOrder';
         if (type === 'future_usdt') {
             method = 'fapiPrivateGetOrder';
@@ -1475,9 +1472,11 @@ module.exports = class binance extends Exchange {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const defaultType = this.safeString2 (this.options, 'fetchOrders', 'defaultType', market['type']);
-        const type = this.safeString (params, 'type', defaultType);
+        const type = this.safeString (market, 'type', defaultType);
         let method = 'privateGetAllOrders';
         if (type === 'future') {
+            method = 'dapiPrivateGetAllOrders';
+        } else if (type === 'future_usdt') {
             method = 'fapiPrivateGetAllOrders';
         } else if (type === 'margin') {
             method = 'sapiGetMarginAllOrders';
@@ -1600,7 +1599,7 @@ module.exports = class binance extends Exchange {
         let method = 'privateDeleteOrder';
         if (type === 'future') {
             method = 'dapiPrivateDeleteOrder';
-        } else if ('future_usdt') {
+        } else if (type === 'future_usdt') {
             method = 'fapiPrivateDeleteOrder';
         } else if (type === 'margin') {
             method = 'sapiDeleteMarginOrder';
@@ -1620,7 +1619,7 @@ module.exports = class binance extends Exchange {
             'symbol': market['id'],
         };
         const defaultType = this.safeString2 (this.options, 'cancelAllOrders', 'defaultType', 'spot');
-        const type = this.safeString (params, 'type', defaultType);
+        const type = this.safeString (market, 'type', defaultType);
         const query = this.omit (params, 'type');
         const method = (type === 'spot') ? 'privateDeleteOpenOrders' : 'fapiPrivateDeleteAllOpenOrders';
         const response = await this[method] (this.extend (request, query));
@@ -1637,8 +1636,8 @@ module.exports = class binance extends Exchange {
         }
         await this.loadMarkets ();
         const market = this.market (symbol);
-        const type = market['type']
-        let method = '' // market['spot'] ? 'privateGetMyTrades' : 'fapiPrivateGetUserTrades';
+        const type = market['type'];
+        let method = ''; // market['spot'] ? 'privateGetMyTrades' : 'fapiPrivateGetUserTrades';
         if (type === 'future') {
             method = 'dapiPrivateGetUserTrades';
         } else if (type === 'future_usdt') {
@@ -2152,7 +2151,7 @@ module.exports = class binance extends Exchange {
                 throw new AuthenticationError (this.id + ' userDataStream endpoint requires `apiKey` credential');
             }
         }
-        if ((api === 'private') || (api === 'sapi') || (api === 'wapi' && path !== 'systemStatus') || (api === 'fapiPrivate')) {
+        if ((api === 'private') || (api === 'sapi') || (api === 'wapi' && path !== 'systemStatus') || (api === 'fapiPrivate') || (api === 'dapiPrivate')) {
             this.checkRequiredCredentials ();
             let query = undefined;
             if ((api === 'sapi') && (path === 'asset/dust')) {
