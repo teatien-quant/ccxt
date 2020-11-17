@@ -44,7 +44,7 @@ git add -f python/LICENSE.txt python/package.json python/README.md
 git commit -a -m "${COMMIT_MESSAGE}" -m '[ci skip]'
 git tag -a "${COMMIT_MESSAGE}" -m "${LAST_COMMIT_MESSAGE}" -m "" -m "[ci skip]"
 git remote remove origin
-git remote add origin https://${GITHUB_TOKEN}@github.com/teatien/ccxt.git
+git remote add origin https://${GITHUB_TOKEN}@github.com/teatien-quant/ccxt.git
 node build/cleanup-old-tags --limit
 git push origin --tags HEAD:teatien-master
 
