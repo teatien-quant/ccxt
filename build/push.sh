@@ -22,15 +22,15 @@ fi
 
 # ---------------------------------------------------------------------------------
 
-echo "Pushing to ccxt.wiki"
+# echo "Pushing to ccxt.wiki"
 
-cd build/ccxt.wiki
-cp -R ../../wiki/* .
-git commit -a -m ${COMMIT_MESSAGE} || true
-git remote remove origin
-git remote add origin https://${GITHUB_TOKEN}@github.com/ccxt/ccxt.wiki.git
-git push origin HEAD:master
-cd ../..
+# cd build/ccxt.wiki
+# cp -R ../../wiki/* .
+# git commit -a -m ${COMMIT_MESSAGE} || true
+# git remote remove origin
+# git remote add origin https://${GITHUB_TOKEN}@github.com/ccxt/ccxt.wiki.git
+# git push origin HEAD:master
+# cd ../..
 
 # ---------------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ git add -f python/LICENSE.txt python/package.json python/README.md
 git commit -a -m "${COMMIT_MESSAGE}" -m '[ci skip]'
 git tag -a "${COMMIT_MESSAGE}" -m "${LAST_COMMIT_MESSAGE}" -m "" -m "[ci skip]"
 git remote remove origin
-git remote add origin https://${GITHUB_TOKEN}@github.com/ccxt/ccxt.git
+git remote add origin https://${GITHUB_TOKEN}@github.com/teatien/ccxt.git
 node build/cleanup-old-tags --limit
-git push origin --tags HEAD:master
+git push origin --tags HEAD:teatien-master
 

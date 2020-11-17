@@ -29,15 +29,15 @@ before_install:
 - pip2 install requests[security]
 - git pull --tags
 script:
-- if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then npm config set git-tag-version=false && NPM_VERSION=$(npm version patch); fi
+- if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "teatien-master" ]; then npm config set git-tag-version=false && NPM_VERSION=$(npm version patch); fi
 - npm run build
 - cd python
 - tox -e doc
 - cd ..
-- npm run test-base
+# - npm run test-base
 - bash -c 'node run-tests --js --python 5' 2>&1
-- if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then env COMMIT_MESSAGE=${NPM_VERSION:1} GITHUB_TOKEN=${GITHUB_TOKEN} ./build/push.sh; fi
-- if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "master" ]; then cd python && env PYPI_PASSWORD=${PYPI_PASSWORD} ./deploy.sh && cd ..; fi
+- if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "teatien-master" ]; then env COMMIT_MESSAGE=${NPM_VERSION:1} GITHUB_TOKEN=${GITHUB_TOKEN} ./build/push.sh; fi
+- if [ "$TRAVIS_PULL_REQUEST" = "false" ] && [ "$TRAVIS_BRANCH" = "teatien-master" ]; then cd python && env PYPI_PASSWORD=${PYPI_PASSWORD} ./deploy.sh && cd ..; fi
 after_failure:
 - dmesg | grep -i kill
 deploy:
