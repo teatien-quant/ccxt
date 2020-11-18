@@ -321,15 +321,22 @@ class binance extends Exchange {
                 'dapiPrivate' => array(
                     'get' => array(
                         'order',
+                        'openOrders',
                         'allOrders',
                         'userTrades',
+                        'account',
                     ),
                     'post' => array(
                         'order',
+                        'listenkey',
                     ),
                     'delete' => array(
                         'order',
                         'batchOrders',
+                        'listenkey',
+                    ),
+                    'put' => array(
+                        'listenkey',
                     ),
                 ),
             ),
@@ -668,8 +675,10 @@ class binance extends Exchange {
         $defaultType = $this->safe_string_2($this->options, 'fetchBalance', 'defaultType', 'spot');
         $type = $this->safe_string($params, 'type', $defaultType);
         $method = 'privateGetAccount';
-        if ($type === 'future') {
+        if ($type === 'future_usdt') {
             $method = 'fapiPrivateGetAccount';
+        } else if ($type === 'future') {
+            $method = 'dapiPrivateGetAccount';
         } else if ($type === 'margin') {
             $method = 'sapiGetMarginAccount';
         }
@@ -1556,7 +1565,7 @@ class binance extends Exchange {
             $market = $this->market($symbol);
             $request['symbol'] = $market['id'];
             $defaultType = $this->safe_string_2($this->options, 'fetchOpenOrders', 'defaultType', $market['type']);
-            $type = $this->safe_string($params, 'type', $defaultType);
+            $type = $this->safe_string($market, 'type', $defaultType);
             $query = $this->omit($params, 'type');
         } else if ($this->options['warnOnFetchOpenOrdersWithoutSymbol']) {
             $symbols = $this->symbols;
@@ -1565,12 +1574,14 @@ class binance extends Exchange {
             throw new ExchangeError($this->id . ' fetchOpenOrders WARNING => fetching open orders without specifying a $symbol is rate-limited to one call per ' . (string) $fetchOpenOrdersRateLimit . ' seconds. Do not call this $method frequently to avoid ban. Set ' . $this->id . '.options["warnOnFetchOpenOrdersWithoutSymbol"] = false to suppress this warning message.');
         } else {
             $defaultType = $this->safe_string_2($this->options, 'fetchOpenOrders', 'defaultType', 'spot');
-            $type = $this->safe_string($params, 'type', $defaultType);
+            $type = $this->safe_string($market, 'type', $defaultType);
             $query = $this->omit($params, 'type');
         }
         $method = 'privateGetOpenOrders';
-        if ($type === 'future') {
+        if ($type === 'future_usdt') {
             $method = 'fapiPrivateGetOpenOrders';
+        } else if ($type === 'future') {
+            $method = 'dapiPrivateGetOpenOrders';
         } else if ($type === 'margin') {
             $method = 'sapiGetMarginOpenOrders';
         }

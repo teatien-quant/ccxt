@@ -333,15 +333,22 @@ class binance(Exchange):
                 'dapiPrivate': {
                     'get': [
                         'order',
+                        'openOrders',
                         'allOrders',
                         'userTrades',
+                        'account',
                     ],
                     'post': [
                         'order',
+                        'listenkey',
                     ],
                     'delete': [
                         'order',
                         'batchOrders',
+                        'listenkey',
+                    ],
+                    'put': [
+                        'listenkey',
                     ],
                 },
             },
@@ -661,8 +668,10 @@ class binance(Exchange):
         defaultType = self.safe_string_2(self.options, 'fetchBalance', 'defaultType', 'spot')
         type = self.safe_string(params, 'type', defaultType)
         method = 'privateGetAccount'
-        if type == 'future':
+        if type == 'future_usdt':
             method = 'fapiPrivateGetAccount'
+        elif type == 'future':
+            method = 'dapiPrivateGetAccount'
         elif type == 'margin':
             method = 'sapiGetMarginAccount'
         query = self.omit(params, 'type')
@@ -1463,7 +1472,7 @@ class binance(Exchange):
             market = self.market(symbol)
             request['symbol'] = market['id']
             defaultType = self.safe_string_2(self.options, 'fetchOpenOrders', 'defaultType', market['type'])
-            type = self.safe_string(params, 'type', defaultType)
+            type = self.safe_string(market, 'type', defaultType)
             query = self.omit(params, 'type')
         elif self.options['warnOnFetchOpenOrdersWithoutSymbol']:
             symbols = self.symbols
@@ -1472,11 +1481,13 @@ class binance(Exchange):
             raise ExchangeError(self.id + ' fetchOpenOrders WARNING: fetching open orders without specifying a symbol is rate-limited to one call per ' + str(fetchOpenOrdersRateLimit) + ' seconds. Do not call self method frequently to avoid ban. Set ' + self.id + '.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.')
         else:
             defaultType = self.safe_string_2(self.options, 'fetchOpenOrders', 'defaultType', 'spot')
-            type = self.safe_string(params, 'type', defaultType)
+            type = self.safe_string(market, 'type', defaultType)
             query = self.omit(params, 'type')
         method = 'privateGetOpenOrders'
-        if type == 'future':
+        if type == 'future_usdt':
             method = 'fapiPrivateGetOpenOrders'
+        elif type == 'future':
+            method = 'dapiPrivateGetOpenOrders'
         elif type == 'margin':
             method = 'sapiGetMarginOpenOrders'
         response = await getattr(self, method)(self.extend(request, query))
