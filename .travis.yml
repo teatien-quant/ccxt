@@ -43,7 +43,7 @@ after_failure:
 deploy:
   - provider: npm
     email: thrall.chen@gmail.com
-    api_key: 33a21545-98bf-4625-a771-0e8ef6e0c27a
+    api_key: ${NPM_TOKEN}
       
 env:
   global:
