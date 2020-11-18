@@ -317,6 +317,7 @@ module.exports = class binance extends Exchange {
                         'openOrders',
                         'allOrders',
                         'userTrades',
+                        'account',
                     ],
                     'post': [
                         'order',
