@@ -314,6 +314,7 @@ module.exports = class binance extends Exchange {
                 'dapiPrivate': {
                     'get': [
                         'order',
+                        'openOrders',
                         'allOrders',
                         'userTrades',
                     ],
@@ -1556,7 +1557,7 @@ module.exports = class binance extends Exchange {
             market = this.market (symbol);
             request['symbol'] = market['id'];
             const defaultType = this.safeString2 (this.options, 'fetchOpenOrders', 'defaultType', market['type']);
-            type = this.safeString (params, 'type', defaultType);
+            type = this.safeString (market, 'type', defaultType);
             query = this.omit (params, 'type');
         } else if (this.options['warnOnFetchOpenOrdersWithoutSymbol']) {
             const symbols = this.symbols;
@@ -1565,12 +1566,14 @@ module.exports = class binance extends Exchange {
             throw new ExchangeError (this.id + ' fetchOpenOrders WARNING: fetching open orders without specifying a symbol is rate-limited to one call per ' + fetchOpenOrdersRateLimit.toString () + ' seconds. Do not call this method frequently to avoid ban. Set ' + this.id + '.options["warnOnFetchOpenOrdersWithoutSymbol"] = false to suppress this warning message.');
         } else {
             const defaultType = this.safeString2 (this.options, 'fetchOpenOrders', 'defaultType', 'spot');
-            type = this.safeString (params, 'type', defaultType);
+            type = this.safeString (market, 'type', defaultType);
             query = this.omit (params, 'type');
         }
         let method = 'privateGetOpenOrders';
-        if (type === 'future') {
+        if (type === 'future_usdt') {
             method = 'fapiPrivateGetOpenOrders';
+        } else if (type === 'future') {
+            method = 'dapiPrivateGetOpenOrders';
         } else if (type === 'margin') {
             method = 'sapiGetMarginOpenOrders';
         }
