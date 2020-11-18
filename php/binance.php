@@ -90,6 +90,8 @@ class binance extends Exchange {
                     'private' => 'https://api.binance.com/api/v3',
                     'v3' => 'https://api.binance.com/api/v3',
                     'v1' => 'https://api.binance.com/api/v1',
+                    'dapiPublic' => 'https://dapi.binance.com/dapi/v1',
+                    'dapiPrivate' => 'https://dapi.binance.com/dapi/v1',
                 ),
                 'www' => 'https://www.binance.com',
                 'referral' => 'https://www.binance.com/?ref=10205187',
@@ -307,6 +309,29 @@ class binance extends Exchange {
                         'order',
                     ),
                 ),
+                'dapiPublic' => array(
+                    'get' => array(
+                        'exchangeInfo',
+                        'klines',
+                        'depth',
+                        'trades',
+                        'ticker/24hr',
+                    ),
+                ),
+                'dapiPrivate' => array(
+                    'get' => array(
+                        'order',
+                        'allOrders',
+                        'userTrades',
+                    ),
+                    'post' => array(
+                        'order',
+                    ),
+                    'delete' => array(
+                        'order',
+                        'batchOrders',
+                    ),
+                ),
             ),
             'fees' => array(
                 'trading' => array(
@@ -337,6 +362,7 @@ class binance extends Exchange {
                     'limit' => 'RESULT', // we change it from 'ACK' by default to 'RESULT'
                 ),
                 'quoteOrderQty' => true, // whether market orders support amounts in quote currency
+                'fetchMarkets' => ['spot', 'future_usdt', 'future'],
             ),
             // https://binance-docs.github.io/apidocs/spot/en/#error-codes-2
             'exceptions' => array(
@@ -410,13 +436,26 @@ class binance extends Exchange {
     }
 
     public function fetch_markets($params = array ()) {
-        $defaultType = $this->safe_string_2($this->options, 'fetchMarkets', 'defaultType', 'spot');
-        $type = $this->safe_string($params, 'type', $defaultType);
-        $query = $this->omit($params, 'type');
-        if (($type !== 'spot') && ($type !== 'future') && ($type !== 'margin')) {
-            throw new ExchangeError($this->id . " does not support '" . $type . "' $type, set exchange.options['defaultType'] to 'spot', 'margin' or 'future'"); // eslint-disable-line quotes
+        $types = $this->safe_value($this->options, 'fetchMarkets');
+        $result = array();
+        for ($i = 0; $i < count($types); $i++) {
+            $markets = $this->fetch_markets_by_type($types[$i], $params);
+            $result = $this->array_concat($result, $markets);
         }
-        $method = ($type === 'future') ? 'fapiPublicGetExchangeInfo' : 'publicGetExchangeInfo';
+        return $result;
+    }
+
+    public function fetch_markets_by_type($type, $params = array ()) {
+        // $defaultType = $this->safe_string_2($this->options, 'fetchMarkets', 'defaultType', 'spot');
+        // $type = $this->safe_string($params, 'type', $defaultType);
+        $query = $this->omit($params, 'type');
+        if (($type !== 'spot') && ($type !== 'future_usdt') && ($type !== 'margin') && ($type !== 'future')) {
+            throw new ExchangeError($this->id . " does not support '" . $type . "' $type, set exchange.options['defaultType'] to 'spot', 'margin' 'future' or 'future_usdt'"); // eslint-disable-line quotes
+        }
+        $method = ($type === 'future_usdt') ? 'fapiPublicGetExchangeInfo' : 'publicGetExchangeInfo';
+        if ($type === 'future') {
+            $method = 'dapiPublicGetExchangeInfo';
+        }
         $response = $this->$method ($query);
         //
         // $spot / $margin
@@ -459,7 +498,7 @@ class binance extends Exchange {
         //         ],
         //     }
         //
-        // futures (fapi)
+        // futures (fapi) usdt
         //
         //     {
         //         "timezone":"UTC",
@@ -500,17 +539,26 @@ class binance extends Exchange {
         $markets = $this->safe_value($response, 'symbols');
         $result = array();
         for ($i = 0; $i < count($markets); $i++) {
+            // todo:
             $market = $markets[$i];
-            $future = (is_array($market) && array_key_exists('maintMarginPercent', $market));
-            $spot = !$future;
-            $marketType = $spot ? 'spot' : 'future';
+            $future = $type === 'future';
+            $spot = $type === 'spot';
+            $future_usdt = $type === 'future_usdt';
+            $marketType = $type;
             $id = $this->safe_string($market, 'symbol');
             $lowercaseId = $this->safe_string_lower($market, 'symbol');
             $baseId = $this->safe_string($market, 'baseAsset');
             $quoteId = $this->safe_string($market, 'quoteAsset');
             $base = $this->safe_currency_code($baseId);
             $quote = $this->safe_currency_code($quoteId);
-            $symbol = $base . '/' . $quote;
+            $symbol = '';
+            if ($type === 'future') {
+                $symbol = $id;
+            } else if ($type === 'future_usdt') {
+                $symbol = $base . '-' . $quote . '-SWAP';
+            } else {
+                $symbol = $base . '/' . $quote;
+            }
             $filters = $this->safe_value($market, 'filters', array());
             $filtersByType = $this->index_by($filters, 'filterType');
             $precision = array(
@@ -521,7 +569,7 @@ class binance extends Exchange {
             );
             $status = $this->safe_string($market, 'status');
             $active = ($status === 'TRADING');
-            $margin = $this->safe_value($market, 'isMarginTradingAllowed', $future);
+            $margin = $this->safe_value($market, 'isMarginTradingAllowed', $future) && $type === 'spot';
             $entry = array(
                 'id' => $id,
                 'lowercaseId' => $lowercaseId,
@@ -535,6 +583,7 @@ class binance extends Exchange {
                 'spot' => $spot,
                 'margin' => $margin,
                 'future' => $future,
+                'future_usdt' => $future_usdt,
                 'active' => $active,
                 'precision' => $precision,
                 'limits' => array(
@@ -738,7 +787,14 @@ class binance extends Exchange {
         if ($limit !== null) {
             $request['limit'] = $limit; // default 100, max 5000, see https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#order-book
         }
-        $method = $market['spot'] ? 'publicGetDepth' : 'fapiPublicGetDepth';
+        $method = '';
+        if ($market['type'] === 'future_usdt') {
+            $method = 'fapiPublicGetDepth';
+        } else if ($market['type'] === 'future') {
+            $method = 'dapiPublicGetDepth';
+        } else {
+            $method = 'publicGetDepth';
+        }
         $response = $this->$method (array_merge($request, $params));
         $orderbook = $this->parse_order_book($response);
         $orderbook['nonce'] = $this->safe_integer($response, 'lastUpdateId');
@@ -796,10 +852,16 @@ class binance extends Exchange {
     public function fetch_ticker($symbol, $params = array ()) {
         $this->load_markets();
         $market = $this->market($symbol);
+        $type = $market['type'];
         $request = array(
             'symbol' => $market['id'],
         );
-        $method = $market['spot'] ? 'publicGetTicker24hr' : 'fapiPublicGetTicker24hr';
+        $method = 'publicGetTicker24hr';
+        if ($type === 'future') {
+            $method = 'dapiPublicGetTicker24hr';
+        } else if ($type === 'future_usdt') {
+            $method = 'fapiPublicGetTicker24hr';
+        }
         $response = $this->$method (array_merge($request, $params));
         return $this->parse_ticker($response, $market);
     }
@@ -869,7 +931,12 @@ class binance extends Exchange {
         if ($limit !== null) {
             $request['limit'] = $limit; // default == max == 500
         }
-        $method = $market['spot'] ? 'publicGetKlines' : 'fapiPublicGetKlines';
+        $method = 'publicGetKlines'; // spot
+        if ($market['type'] === 'future_usdt') {
+            $method = 'fapiPublicGetKlines';
+        } else if ($market['type'] === 'future') {
+            $method = 'dapiPublicGetKlines';
+        }
         $response = $this->$method (array_merge($request, $params));
         //
         //     [
@@ -1019,22 +1086,15 @@ class binance extends Exchange {
             // 'limit' => 500,     // default = 500, maximum = 1000
         );
         $defaultType = $this->safe_string_2($this->options, 'fetchTrades', 'defaultType', 'spot');
-        $type = $this->safe_string($params, 'type', $defaultType);
+        $type = $this->safe_string($market, 'type', $defaultType);
         $query = $this->omit($params, 'type');
-        $defaultMethod = ($type === 'future') ? 'fapiPublicGetTrades' : 'publicGetTrades';
-        $method = $this->safe_string($this->options, 'fetchTradesMethod', $defaultMethod);
-        if ($method === 'publicGetAggTrades') {
-            if ($since !== null) {
-                $request['startTime'] = $since;
-                // https://github.com/ccxt/ccxt/issues/6400
-                // https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#compressedaggregate-trades-list
-                $request['endTime'] = $this->sum($since, 3600000);
-            }
-            if ($type === 'future') {
-                $method = 'fapiPublicGetAggTrades';
-            }
-        } else if (($method === 'publicGetHistoricalTrades') && ($type === 'future')) {
-            $method = 'fapiPublicGetHistoricalTrades';
+        $method = '';
+        if ($type === 'future') {
+            $method = 'dapiPublicGetTrades';
+        } else if ($type === 'future_usdt') {
+            $method = 'fapiPublicGetTrades';
+        } else {
+            $method = 'PublicGetTrades';
         }
         if ($limit !== null) {
             $request['limit'] = $limit; // default = 500, maximum = 1000
@@ -1246,12 +1306,14 @@ class binance extends Exchange {
         $this->load_markets();
         $market = $this->market($symbol);
         $defaultType = $this->safe_string_2($this->options, 'createOrder', 'defaultType', $market['type']);
-        $orderType = $this->safe_string($params, 'type', $defaultType);
+        $orderType = $this->safe_string($market, 'type', $defaultType);
         $clientOrderId = $this->safe_string_2($params, 'newClientOrderId', 'clientOrderId');
         $params = $this->omit($params, array( 'type', 'newClientOrderId', 'clientOrderId' ));
         $method = 'privatePostOrder';
-        if ($orderType === 'future') {
+        if ($orderType === 'future_usdt') {
             $method = 'fapiPrivatePostOrder';
+        } else if ($orderType === 'future') {
+            $method = 'dapiPrivatePostOrder';
         } else if ($orderType === 'margin') {
             $method = 'sapiPostMarginOrder';
         }
@@ -1387,10 +1449,12 @@ class binance extends Exchange {
         $this->load_markets();
         $market = $this->market($symbol);
         $defaultType = $this->safe_string_2($this->options, 'fetchOrder', 'defaultType', $market['type']);
-        $type = $this->safe_string($params, 'type', $defaultType);
+        $type = $this->safe_string($market, 'type', $defaultType);
         $method = 'privateGetOrder';
-        if ($type === 'future') {
+        if ($type === 'future_usdt') {
             $method = 'fapiPrivateGetOrder';
+        } else if ($type === 'future') {
+            $method = 'dapiPrivateGetOrder';
         } else if ($type === 'margin') {
             $method = 'sapiGetMarginOrder';
         }
@@ -1415,9 +1479,11 @@ class binance extends Exchange {
         $this->load_markets();
         $market = $this->market($symbol);
         $defaultType = $this->safe_string_2($this->options, 'fetchOrders', 'defaultType', $market['type']);
-        $type = $this->safe_string($params, 'type', $defaultType);
+        $type = $this->safe_string($market, 'type', $defaultType);
         $method = 'privateGetAllOrders';
         if ($type === 'future') {
+            $method = 'dapiPrivateGetAllOrders';
+        } else if ($type === 'future_usdt') {
             $method = 'fapiPrivateGetAllOrders';
         } else if ($type === 'margin') {
             $method = 'sapiGetMarginAllOrders';
@@ -1524,7 +1590,7 @@ class binance extends Exchange {
         $this->load_markets();
         $market = $this->market($symbol);
         $defaultType = $this->safe_string_2($this->options, 'fetchOpenOrders', 'defaultType', $market['type']);
-        $type = $this->safe_string($params, 'type', $defaultType);
+        $type = $this->safe_string($market, 'type', $defaultType);
         // https://github.com/ccxt/ccxt/issues/6507
         $origClientOrderId = $this->safe_value_2($params, 'origClientOrderId', 'clientOrderId');
         $request = array(
@@ -1539,6 +1605,8 @@ class binance extends Exchange {
         }
         $method = 'privateDeleteOrder';
         if ($type === 'future') {
+            $method = 'dapiPrivateDeleteOrder';
+        } else if ($type === 'future_usdt') {
             $method = 'fapiPrivateDeleteOrder';
         } else if ($type === 'margin') {
             $method = 'sapiDeleteMarginOrder';
@@ -1558,7 +1626,7 @@ class binance extends Exchange {
             'symbol' => $market['id'],
         );
         $defaultType = $this->safe_string_2($this->options, 'cancelAllOrders', 'defaultType', 'spot');
-        $type = $this->safe_string($params, 'type', $defaultType);
+        $type = $this->safe_string($market, 'type', $defaultType);
         $query = $this->omit($params, 'type');
         $method = ($type === 'spot') ? 'privateDeleteOpenOrders' : 'fapiPrivateDeleteAllOpenOrders';
         $response = $this->$method (array_merge($request, $query));
@@ -1575,7 +1643,15 @@ class binance extends Exchange {
         }
         $this->load_markets();
         $market = $this->market($symbol);
-        $method = $market['spot'] ? 'privateGetMyTrades' : 'fapiPrivateGetUserTrades';
+        $type = $market['type'];
+        $method = ''; // $market['spot'] ? 'privateGetMyTrades' : 'fapiPrivateGetUserTrades';
+        if ($type === 'future') {
+            $method = 'dapiPrivateGetUserTrades';
+        } else if ($type === 'future_usdt') {
+            $method = 'fapiPrivateGetUserTrades';
+        } else {
+            $method = 'privateGetMyTrades';
+        }
         $request = array(
             'symbol' => $market['id'],
         );
@@ -2082,7 +2158,7 @@ class binance extends Exchange {
                 throw new AuthenticationError($this->id . ' $userDataStream endpoint requires `apiKey` credential');
             }
         }
-        if (($api === 'private') || ($api === 'sapi') || ($api === 'wapi' && $path !== 'systemStatus') || ($api === 'fapiPrivate')) {
+        if (($api === 'private') || ($api === 'sapi') || ($api === 'wapi' && $path !== 'systemStatus') || ($api === 'fapiPrivate') || ($api === 'dapiPrivate')) {
             $this->check_required_credentials();
             $query = null;
             if (($api === 'sapi') && ($path === 'asset/dust')) {

@@ -102,6 +102,8 @@ class binance(Exchange):
                     'private': 'https://api.binance.com/api/v3',
                     'v3': 'https://api.binance.com/api/v3',
                     'v1': 'https://api.binance.com/api/v1',
+                    'dapiPublic': 'https://dapi.binance.com/dapi/v1',
+                    'dapiPrivate': 'https://dapi.binance.com/dapi/v1',
                 },
                 'www': 'https://www.binance.com',
                 'referral': 'https://www.binance.com/?ref=10205187',
@@ -319,6 +321,29 @@ class binance(Exchange):
                         'order',
                     ],
                 },
+                'dapiPublic': {
+                    'get': [
+                        'exchangeInfo',
+                        'klines',
+                        'depth',
+                        'trades',
+                        'ticker/24hr',
+                    ],
+                },
+                'dapiPrivate': {
+                    'get': [
+                        'order',
+                        'allOrders',
+                        'userTrades',
+                    ],
+                    'post': [
+                        'order',
+                    ],
+                    'delete': [
+                        'order',
+                        'batchOrders',
+                    ],
+                },
             },
             'fees': {
                 'trading': {
@@ -349,6 +374,7 @@ class binance(Exchange):
                     'limit': 'RESULT',  # we change it from 'ACK' by default to 'RESULT'
                 },
                 'quoteOrderQty': True,  # whether market orders support amounts in quote currency
+                'fetchMarkets': ['spot', 'future_usdt', 'future'],
             },
             # https://binance-docs.github.io/apidocs/spot/en/#error-codes-2
             'exceptions': {
@@ -418,12 +444,22 @@ class binance(Exchange):
         return self.options['timeDifference']
 
     async def fetch_markets(self, params={}):
-        defaultType = self.safe_string_2(self.options, 'fetchMarkets', 'defaultType', 'spot')
-        type = self.safe_string(params, 'type', defaultType)
+        types = self.safe_value(self.options, 'fetchMarkets')
+        result = []
+        for i in range(0, len(types)):
+            markets = await self.fetch_markets_by_type(types[i], params)
+            result = self.array_concat(result, markets)
+        return result
+
+    async def fetch_markets_by_type(self, type, params={}):
+        # defaultType = self.safe_string_2(self.options, 'fetchMarkets', 'defaultType', 'spot')
+        # type = self.safe_string(params, 'type', defaultType)
         query = self.omit(params, 'type')
-        if (type != 'spot') and (type != 'future') and (type != 'margin'):
-            raise ExchangeError(self.id + " does not support '" + type + "' type, set exchange.options['defaultType'] to 'spot', 'margin' or 'future'")  # eslint-disable-line quotes
-        method = 'fapiPublicGetExchangeInfo' if (type == 'future') else 'publicGetExchangeInfo'
+        if (type != 'spot') and (type != 'future_usdt') and (type != 'margin') and (type != 'future'):
+            raise ExchangeError(self.id + " does not support '" + type + "' type, set exchange.options['defaultType'] to 'spot', 'margin' 'future' or 'future_usdt'")  # eslint-disable-line quotes
+        method = 'fapiPublicGetExchangeInfo' if (type == 'future_usdt') else 'publicGetExchangeInfo'
+        if type == 'future':
+            method = 'dapiPublicGetExchangeInfo'
         response = await getattr(self, method)(query)
         #
         # spot / margin
@@ -466,7 +502,7 @@ class binance(Exchange):
         #         ],
         #     }
         #
-        # futures(fapi)
+        # futures(fapi) usdt
         #
         #     {
         #         "timezone":"UTC",
@@ -506,17 +542,25 @@ class binance(Exchange):
         markets = self.safe_value(response, 'symbols')
         result = []
         for i in range(0, len(markets)):
+            # todo:
             market = markets[i]
-            future = ('maintMarginPercent' in market)
-            spot = not future
-            marketType = 'spot' if spot else 'future'
+            future = type == 'future'
+            spot = type == 'spot'
+            future_usdt = type == 'future_usdt'
+            marketType = type
             id = self.safe_string(market, 'symbol')
             lowercaseId = self.safe_string_lower(market, 'symbol')
             baseId = self.safe_string(market, 'baseAsset')
             quoteId = self.safe_string(market, 'quoteAsset')
             base = self.safe_currency_code(baseId)
             quote = self.safe_currency_code(quoteId)
-            symbol = base + '/' + quote
+            symbol = ''
+            if type == 'future':
+                symbol = id
+            elif type == 'future_usdt':
+                symbol = base + '-' + quote + '-SWAP'
+            else:
+                symbol = base + '/' + quote
             filters = self.safe_value(market, 'filters', [])
             filtersByType = self.index_by(filters, 'filterType')
             precision = {
@@ -527,7 +571,7 @@ class binance(Exchange):
             }
             status = self.safe_string(market, 'status')
             active = (status == 'TRADING')
-            margin = self.safe_value(market, 'isMarginTradingAllowed', future)
+            margin = self.safe_value(market, 'isMarginTradingAllowed', future) and type == 'spot'
             entry = {
                 'id': id,
                 'lowercaseId': lowercaseId,
@@ -541,6 +585,7 @@ class binance(Exchange):
                 'spot': spot,
                 'margin': margin,
                 'future': future,
+                'future_usdt': future_usdt,
                 'active': active,
                 'precision': precision,
                 'limits': {
@@ -729,7 +774,13 @@ class binance(Exchange):
         }
         if limit is not None:
             request['limit'] = limit  # default 100, max 5000, see https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#order-book
-        method = 'publicGetDepth' if market['spot'] else 'fapiPublicGetDepth'
+        method = ''
+        if market['type'] == 'future_usdt':
+            method = 'fapiPublicGetDepth'
+        elif market['type'] == 'future':
+            method = 'dapiPublicGetDepth'
+        else:
+            method = 'publicGetDepth'
         response = await getattr(self, method)(self.extend(request, params))
         orderbook = self.parse_order_book(response)
         orderbook['nonce'] = self.safe_integer(response, 'lastUpdateId')
@@ -781,10 +832,15 @@ class binance(Exchange):
     async def fetch_ticker(self, symbol, params={}):
         await self.load_markets()
         market = self.market(symbol)
+        type = market['type']
         request = {
             'symbol': market['id'],
         }
-        method = 'publicGetTicker24hr' if market['spot'] else 'fapiPublicGetTicker24hr'
+        method = 'publicGetTicker24hr'
+        if type == 'future':
+            method = 'dapiPublicGetTicker24hr'
+        elif type == 'future_usdt':
+            method = 'fapiPublicGetTicker24hr'
         response = await getattr(self, method)(self.extend(request, params))
         return self.parse_ticker(response, market)
 
@@ -846,7 +902,11 @@ class binance(Exchange):
             request['startTime'] = since
         if limit is not None:
             request['limit'] = limit  # default == max == 500
-        method = 'publicGetKlines' if market['spot'] else 'fapiPublicGetKlines'
+        method = 'publicGetKlines'  # spot
+        if market['type'] == 'future_usdt':
+            method = 'fapiPublicGetKlines'
+        elif market['type'] == 'future':
+            method = 'dapiPublicGetKlines'
         response = await getattr(self, method)(self.extend(request, params))
         #
         #     [
@@ -986,20 +1046,15 @@ class binance(Exchange):
             # 'limit': 500,     # default = 500, maximum = 1000
         }
         defaultType = self.safe_string_2(self.options, 'fetchTrades', 'defaultType', 'spot')
-        type = self.safe_string(params, 'type', defaultType)
+        type = self.safe_string(market, 'type', defaultType)
         query = self.omit(params, 'type')
-        defaultMethod = 'fapiPublicGetTrades' if (type == 'future') else 'publicGetTrades'
-        method = self.safe_string(self.options, 'fetchTradesMethod', defaultMethod)
-        if method == 'publicGetAggTrades':
-            if since is not None:
-                request['startTime'] = since
-                # https://github.com/ccxt/ccxt/issues/6400
-                # https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#compressedaggregate-trades-list
-                request['endTime'] = self.sum(since, 3600000)
-            if type == 'future':
-                method = 'fapiPublicGetAggTrades'
-        elif (method == 'publicGetHistoricalTrades') and (type == 'future'):
-            method = 'fapiPublicGetHistoricalTrades'
+        method = ''
+        if type == 'future':
+            method = 'dapiPublicGetTrades'
+        elif type == 'future_usdt':
+            method = 'fapiPublicGetTrades'
+        else:
+            method = 'PublicGetTrades'
         if limit is not None:
             request['limit'] = limit  # default = 500, maximum = 1000
         #
@@ -1186,12 +1241,14 @@ class binance(Exchange):
         await self.load_markets()
         market = self.market(symbol)
         defaultType = self.safe_string_2(self.options, 'createOrder', 'defaultType', market['type'])
-        orderType = self.safe_string(params, 'type', defaultType)
+        orderType = self.safe_string(market, 'type', defaultType)
         clientOrderId = self.safe_string_2(params, 'newClientOrderId', 'clientOrderId')
         params = self.omit(params, ['type', 'newClientOrderId', 'clientOrderId'])
         method = 'privatePostOrder'
-        if orderType == 'future':
+        if orderType == 'future_usdt':
             method = 'fapiPrivatePostOrder'
+        elif orderType == 'future':
+            method = 'dapiPrivatePostOrder'
         elif orderType == 'margin':
             method = 'sapiPostMarginOrder'
         # the next 5 lines are added to support for testing orders
@@ -1307,10 +1364,12 @@ class binance(Exchange):
         await self.load_markets()
         market = self.market(symbol)
         defaultType = self.safe_string_2(self.options, 'fetchOrder', 'defaultType', market['type'])
-        type = self.safe_string(params, 'type', defaultType)
+        type = self.safe_string(market, 'type', defaultType)
         method = 'privateGetOrder'
-        if type == 'future':
+        if type == 'future_usdt':
             method = 'fapiPrivateGetOrder'
+        elif type == 'future':
+            method = 'dapiPrivateGetOrder'
         elif type == 'margin':
             method = 'sapiGetMarginOrder'
         request = {
@@ -1331,9 +1390,11 @@ class binance(Exchange):
         await self.load_markets()
         market = self.market(symbol)
         defaultType = self.safe_string_2(self.options, 'fetchOrders', 'defaultType', market['type'])
-        type = self.safe_string(params, 'type', defaultType)
+        type = self.safe_string(market, 'type', defaultType)
         method = 'privateGetAllOrders'
         if type == 'future':
+            method = 'dapiPrivateGetAllOrders'
+        elif type == 'future_usdt':
             method = 'fapiPrivateGetAllOrders'
         elif type == 'margin':
             method = 'sapiGetMarginAllOrders'
@@ -1431,7 +1492,7 @@ class binance(Exchange):
         await self.load_markets()
         market = self.market(symbol)
         defaultType = self.safe_string_2(self.options, 'fetchOpenOrders', 'defaultType', market['type'])
-        type = self.safe_string(params, 'type', defaultType)
+        type = self.safe_string(market, 'type', defaultType)
         # https://github.com/ccxt/ccxt/issues/6507
         origClientOrderId = self.safe_value_2(params, 'origClientOrderId', 'clientOrderId')
         request = {
@@ -1445,6 +1506,8 @@ class binance(Exchange):
             request['origClientOrderId'] = origClientOrderId
         method = 'privateDeleteOrder'
         if type == 'future':
+            method = 'dapiPrivateDeleteOrder'
+        elif type == 'future_usdt':
             method = 'fapiPrivateDeleteOrder'
         elif type == 'margin':
             method = 'sapiDeleteMarginOrder'
@@ -1461,7 +1524,7 @@ class binance(Exchange):
             'symbol': market['id'],
         }
         defaultType = self.safe_string_2(self.options, 'cancelAllOrders', 'defaultType', 'spot')
-        type = self.safe_string(params, 'type', defaultType)
+        type = self.safe_string(market, 'type', defaultType)
         query = self.omit(params, 'type')
         method = 'privateDeleteOpenOrders' if (type == 'spot') else 'fapiPrivateDeleteAllOpenOrders'
         response = await getattr(self, method)(self.extend(request, query))
@@ -1475,7 +1538,14 @@ class binance(Exchange):
             raise ArgumentsRequired(self.id + ' fetchMyTrades requires a symbol argument')
         await self.load_markets()
         market = self.market(symbol)
-        method = 'privateGetMyTrades' if market['spot'] else 'fapiPrivateGetUserTrades'
+        type = market['type']
+        method = ''  # 'privateGetMyTrades' if market['spot'] else 'fapiPrivateGetUserTrades'
+        if type == 'future':
+            method = 'dapiPrivateGetUserTrades'
+        elif type == 'future_usdt':
+            method = 'fapiPrivateGetUserTrades'
+        else:
+            method = 'privateGetMyTrades'
         request = {
             'symbol': market['id'],
         }
@@ -1942,7 +2012,7 @@ class binance(Exchange):
                 }
             else:
                 raise AuthenticationError(self.id + ' userDataStream endpoint requires `apiKey` credential')
-        if (api == 'private') or (api == 'sapi') or (api == 'wapi' and path != 'systemStatus') or (api == 'fapiPrivate'):
+        if (api == 'private') or (api == 'sapi') or (api == 'wapi' and path != 'systemStatus') or (api == 'fapiPrivate') or (api == 'dapiPrivate'):
             self.check_required_credentials()
             query = None
             if (api == 'sapi') and (path == 'asset/dust'):
