@@ -319,10 +319,15 @@ module.exports = class binance extends Exchange {
                     ],
                     'post': [
                         'order',
+                        'listenkey',
                     ],
                     'delete': [
                         'order',
                         'batchOrders',
+                        'listenkey',
+                    ],
+                    'put': [
+                        'listenkey',
                     ],
                 },
             },
@@ -661,8 +666,10 @@ module.exports = class binance extends Exchange {
         const defaultType = this.safeString2 (this.options, 'fetchBalance', 'defaultType', 'spot');
         const type = this.safeString (params, 'type', defaultType);
         let method = 'privateGetAccount';
-        if (type === 'future') {
+        if (type === 'future_usdt') {
             method = 'fapiPrivateGetAccount';
+        } else if (type === 'future') {
+            method = 'dapiPrivateGetAccount';
         } else if (type === 'margin') {
             method = 'sapiGetMarginAccount';
         }
