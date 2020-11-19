@@ -2031,11 +2031,6 @@ class binance(Exchange):
                     'timestamp': self.nonce(),
                     'recvWindow': self.options['recvWindow'],
                 }, params))
-            elif path == 'batchOrders':
-                query = self.rawencode(self.extend({
-                    'timestamp': self.nonce(),
-                    'recvWindow': self.options['recvWindow'],
-                }, params))
             else:
                 query = self.urlencode(self.extend({
                     'timestamp': self.nonce(),
