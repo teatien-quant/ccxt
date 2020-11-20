@@ -340,15 +340,15 @@ class binance(Exchange):
                     ],
                     'post': [
                         'order',
-                        'listenkey',
+                        'listenKey',
                     ],
                     'delete': [
                         'order',
                         'batchOrders',
-                        'listenkey',
+                        'listenKey',
                     ],
                     'put': [
-                        'listenkey',
+                        'listenKey',
                     ],
                 },
             },

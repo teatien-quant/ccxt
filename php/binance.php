@@ -328,15 +328,15 @@ class binance extends Exchange {
                     ),
                     'post' => array(
                         'order',
-                        'listenkey',
+                        'listenKey',
                     ),
                     'delete' => array(
                         'order',
                         'batchOrders',
-                        'listenkey',
+                        'listenKey',
                     ),
                     'put' => array(
-                        'listenkey',
+                        'listenKey',
                     ),
                 ),
             ),
