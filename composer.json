@@ -1,5 +1,5 @@
 {
-    "name": "ccxt/ccxt",
+    "name": "teatien/ccxt",
     "type": "library",
     "description": "A JavaScript / Python / PHP cryptocurrency trading library with support for more than 90 bitcoin/altcoin exchanges",
     "keywords": [
