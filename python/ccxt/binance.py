@@ -369,7 +369,7 @@ class binance(Exchange):
                 'fetchTradesMethod': 'publicGetAggTrades',  # publicGetTrades, publicGetHistoricalTrades
                 'fetchTickersMethod': 'publicGetTicker24hr',
                 'defaultTimeInForce': 'GTC',  # 'GTC' = Good To Cancel(default), 'IOC' = Immediate Or Cancel
-                'defaultType': 'spot',  # 'spot', 'future', 'margin'
+                'defaultType': 'spot',  # 'spot', 'futures', 'margin'
                 'hasAlreadyAuthenticatedSuccessfully': False,
                 'warnOnFetchOpenOrdersWithoutSymbol': True,
                 'recvWindow': 5 * 1000,  # 5 sec, binance default
@@ -381,7 +381,7 @@ class binance(Exchange):
                     'limit': 'RESULT',  # we change it from 'ACK' by default to 'RESULT'
                 },
                 'quoteOrderQty': True,  # whether market orders support amounts in quote currency
-                'fetchMarkets': ['spot', 'future_usdt', 'future'],
+                'fetchMarkets': ['spot', 'futures_usdt', 'futures'],
             },
             # https://binance-docs.github.io/apidocs/spot/en/#error-codes-2
             'exceptions': {
@@ -462,10 +462,10 @@ class binance(Exchange):
         # defaultType = self.safe_string_2(self.options, 'fetchMarkets', 'defaultType', 'spot')
         # type = self.safe_string(params, 'type', defaultType)
         query = self.omit(params, 'type')
-        if (type != 'spot') and (type != 'future_usdt') and (type != 'margin') and (type != 'future'):
-            raise ExchangeError(self.id + " does not support '" + type + "' type, set exchange.options['defaultType'] to 'spot', 'margin' 'future' or 'future_usdt'")  # eslint-disable-line quotes
-        method = 'fapiPublicGetExchangeInfo' if (type == 'future_usdt') else 'publicGetExchangeInfo'
-        if type == 'future':
+        if (type != 'spot') and (type != 'futures_usdt') and (type != 'margin') and (type != 'futures'):
+            raise ExchangeError(self.id + " does not support '" + type + "' type, set exchange.options['defaultType'] to 'spot', 'margin' 'futures' or 'futures_usdt'")  # eslint-disable-line quotes
+        method = 'fapiPublicGetExchangeInfo' if (type == 'futures_usdt') else 'publicGetExchangeInfo'
+        if type == 'futures':
             method = 'dapiPublicGetExchangeInfo'
         response = getattr(self, method)(query)
         #
@@ -551,9 +551,9 @@ class binance(Exchange):
         for i in range(0, len(markets)):
             # todo:
             market = markets[i]
-            future = type == 'future'
+            future = type == 'futures'
             spot = type == 'spot'
-            future_usdt = type == 'future_usdt'
+            futures_usdt = type == 'futures_usdt'
             marketType = type
             id = self.safe_string(market, 'symbol')
             lowercaseId = self.safe_string_lower(market, 'symbol')
@@ -562,9 +562,9 @@ class binance(Exchange):
             base = self.safe_currency_code(baseId)
             quote = self.safe_currency_code(quoteId)
             symbol = ''
-            if type == 'future':
+            if type == 'futures':
                 symbol = id
-            elif type == 'future_usdt':
+            elif type == 'futures_usdt':
                 symbol = base + '-' + quote + '-SWAP'
             else:
                 symbol = base + '/' + quote
@@ -576,7 +576,7 @@ class binance(Exchange):
                 'amount': self.safe_integer(market, 'baseAssetPrecision'),
                 'price': self.safe_integer(market, 'quotePrecision'),
             }
-            status = self.safe_string(market, 'status')
+            status = self.safe_string_2(market, 'status', 'contractStatus')
             active = (status == 'TRADING')
             margin = self.safe_value(market, 'isMarginTradingAllowed', future) and type == 'spot'
             entry = {
@@ -591,8 +591,8 @@ class binance(Exchange):
                 'type': marketType,
                 'spot': spot,
                 'margin': margin,
-                'future': future,
-                'future_usdt': future_usdt,
+                'futures': future,
+                'futures_usdt': futures_usdt,
                 'active': active,
                 'precision': precision,
                 'limits': {
@@ -668,9 +668,9 @@ class binance(Exchange):
         defaultType = self.safe_string_2(self.options, 'fetchBalance', 'defaultType', 'spot')
         type = self.safe_string(params, 'type', defaultType)
         method = 'privateGetAccount'
-        if type == 'future_usdt':
+        if type == 'futures_usdt':
             method = 'fapiPrivateGetAccount'
-        elif type == 'future':
+        elif type == 'futures':
             method = 'dapiPrivateGetAccount'
         elif type == 'margin':
             method = 'sapiGetMarginAccount'
@@ -784,9 +784,9 @@ class binance(Exchange):
         if limit is not None:
             request['limit'] = limit  # default 100, max 5000, see https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md#order-book
         method = ''
-        if market['type'] == 'future_usdt':
+        if market['type'] == 'futures_usdt':
             method = 'fapiPublicGetDepth'
-        elif market['type'] == 'future':
+        elif market['type'] == 'futures':
             method = 'dapiPublicGetDepth'
         else:
             method = 'publicGetDepth'
@@ -846,9 +846,9 @@ class binance(Exchange):
             'symbol': market['id'],
         }
         method = 'publicGetTicker24hr'
-        if type == 'future':
+        if type == 'futures':
             method = 'dapiPublicGetTicker24hr'
-        elif type == 'future_usdt':
+        elif type == 'futures_usdt':
             method = 'fapiPublicGetTicker24hr'
         response = getattr(self, method)(self.extend(request, params))
         return self.parse_ticker(response, market)
@@ -912,9 +912,9 @@ class binance(Exchange):
         if limit is not None:
             request['limit'] = limit  # default == max == 500
         method = 'publicGetKlines'  # spot
-        if market['type'] == 'future_usdt':
+        if market['type'] == 'futures_usdt':
             method = 'fapiPublicGetKlines'
-        elif market['type'] == 'future':
+        elif market['type'] == 'futures':
             method = 'dapiPublicGetKlines'
         response = getattr(self, method)(self.extend(request, params))
         #
@@ -1058,9 +1058,9 @@ class binance(Exchange):
         type = self.safe_string(market, 'type', defaultType)
         query = self.omit(params, 'type')
         method = ''
-        if type == 'future':
+        if type == 'futures':
             method = 'dapiPublicGetTrades'
-        elif type == 'future_usdt':
+        elif type == 'futures_usdt':
             method = 'fapiPublicGetTrades'
         else:
             method = 'PublicGetTrades'
@@ -1254,9 +1254,9 @@ class binance(Exchange):
         clientOrderId = self.safe_string_2(params, 'newClientOrderId', 'clientOrderId')
         params = self.omit(params, ['type', 'newClientOrderId', 'clientOrderId'])
         method = 'privatePostOrder'
-        if orderType == 'future_usdt':
+        if orderType == 'futures_usdt':
             method = 'fapiPrivatePostOrder'
-        elif orderType == 'future':
+        elif orderType == 'futures':
             method = 'dapiPrivatePostOrder'
         elif orderType == 'margin':
             method = 'sapiPostMarginOrder'
@@ -1325,7 +1325,7 @@ class binance(Exchange):
         elif (uppercaseType == 'STOP_LOSS') or (uppercaseType == 'TAKE_PROFIT'):
             stopPriceIsRequired = True
             quantityIsRequired = True
-            if market['future']:
+            if market['futures']:
                 priceIsRequired = True
         elif (uppercaseType == 'STOP_LOSS_LIMIT') or (uppercaseType == 'TAKE_PROFIT_LIMIT'):
             quantityIsRequired = True
@@ -1375,9 +1375,9 @@ class binance(Exchange):
         defaultType = self.safe_string_2(self.options, 'fetchOrder', 'defaultType', market['type'])
         type = self.safe_string(market, 'type', defaultType)
         method = 'privateGetOrder'
-        if type == 'future_usdt':
+        if type == 'futures_usdt':
             method = 'fapiPrivateGetOrder'
-        elif type == 'future':
+        elif type == 'futures':
             method = 'dapiPrivateGetOrder'
         elif type == 'margin':
             method = 'sapiGetMarginOrder'
@@ -1401,9 +1401,9 @@ class binance(Exchange):
         defaultType = self.safe_string_2(self.options, 'fetchOrders', 'defaultType', market['type'])
         type = self.safe_string(market, 'type', defaultType)
         method = 'privateGetAllOrders'
-        if type == 'future':
+        if type == 'futures':
             method = 'dapiPrivateGetAllOrders'
-        elif type == 'future_usdt':
+        elif type == 'futures_usdt':
             method = 'fapiPrivateGetAllOrders'
         elif type == 'margin':
             method = 'sapiGetMarginAllOrders'
@@ -1484,9 +1484,9 @@ class binance(Exchange):
             type = self.safe_string(market, 'type', defaultType)
             query = self.omit(params, 'type')
         method = 'privateGetOpenOrders'
-        if type == 'future_usdt':
+        if type == 'futures_usdt':
             method = 'fapiPrivateGetOpenOrders'
-        elif type == 'future':
+        elif type == 'futures':
             method = 'dapiPrivateGetOpenOrders'
         elif type == 'margin':
             method = 'sapiGetMarginOpenOrders'
@@ -1516,9 +1516,9 @@ class binance(Exchange):
         else:
             request['origClientOrderId'] = origClientOrderId
         method = 'privateDeleteOrder'
-        if type == 'future':
+        if type == 'futures':
             method = 'dapiPrivateDeleteOrder'
-        elif type == 'future_usdt':
+        elif type == 'futures_usdt':
             method = 'fapiPrivateDeleteOrder'
         elif type == 'margin':
             method = 'sapiDeleteMarginOrder'
@@ -1551,9 +1551,9 @@ class binance(Exchange):
         market = self.market(symbol)
         type = market['type']
         method = ''  # 'privateGetMyTrades' if market['spot'] else 'fapiPrivateGetUserTrades'
-        if type == 'future':
+        if type == 'futures':
             method = 'dapiPrivateGetUserTrades'
-        elif type == 'future_usdt':
+        elif type == 'futures_usdt':
             method = 'fapiPrivateGetUserTrades'
         else:
             method = 'privateGetMyTrades'
