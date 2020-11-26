@@ -567,7 +567,7 @@ module.exports = class binance extends Exchange {
                 'amount': this.safeInteger (market, 'baseAssetPrecision'),
                 'price': this.safeInteger (market, 'quotePrecision'),
             };
-            const status = this.safeString (market, 'status');
+            const status = this.safeString2 (market, 'status', 'contractStatus');
             const active = (status === 'TRADING');
             const margin = this.safeValue (market, 'isMarginTradingAllowed', future) && type === 'spot';
             const entry = {
