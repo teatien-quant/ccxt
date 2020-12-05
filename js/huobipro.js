@@ -1470,7 +1470,7 @@ module.exports = class huobipro extends Exchange {
             request = {
                 'contract_code': symbol,
                 'order_price_type': type,
-                'volume': int (amount),
+                'volume': parseInt (amount),
                 'direction': side,
             };
             if (type === 'market') {
