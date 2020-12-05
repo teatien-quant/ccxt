@@ -1486,7 +1486,13 @@ module.exports = class huobipro extends Exchange {
         }
         const response = await this[method] (this.extend (request, params));
         const timestamp = this.milliseconds ();
-        const id = this.safeString (response, 'data');
+        let id = undefined;
+        if (market['type'] === 'spot') {
+            id = this.safeString (response, 'data');
+        } else {
+            const data = this.safeValue (response, 'data', {});
+            id = this.safeString (data, 'order_id_str');
+        }
         return {
             'info': response,
             'id': id,
@@ -1509,7 +1515,7 @@ module.exports = class huobipro extends Exchange {
         };
     }
 
-    async cancelOrder (id, symbol, params = {}) {
+    async cancelOrder (id, symbol = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const type = market['type'];
