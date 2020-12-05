@@ -938,15 +938,17 @@ module.exports = class huobipro extends Exchange {
             method = 'marketGetHistoryKline';
         } else {
             request = {
-                'contract_code': market['id'],
                 'period': this.timeframes[timeframe],
             };
             if (type === 'futures') {
-                method = 'futuresMarketGetHistoryKline';
+                request['symbol'] = symbol;
+                method = 'futuresMarketGetMarketHistoryKline';
             } else if (market['quote'] === 'USDT') {
+                request['contract_code'] = symbol;
                 method = 'usdtSwapMarketGetMarketHistoryKline';
             } else {
-                method = 'swapMarketGetHistoryKline';
+                request['contract_code'] = symbol;
+                method = 'swapMarketGetMarketHistoryKline';
             }
         }
         if (limit !== undefined) {
@@ -1474,7 +1476,7 @@ module.exports = class huobipro extends Exchange {
             if (type === 'market') {
                 request['order_price_type'] = 'optimal_20';
             } else {
-                request['price'] = this.priceToPrecision (symbol, price);
+                request['price'] = price;
             }
             if (market['type'] === 'futures') {
                 method = 'futuresPrivatePostV1ContractOrder';
@@ -1484,6 +1486,7 @@ module.exports = class huobipro extends Exchange {
                 method = 'swapPrivatePostV1SwapOrder';
             }
         }
+        self.omit (params, 'type');
         const response = await this[method] (this.extend (request, params));
         const timestamp = this.milliseconds ();
         let id = undefined;
@@ -1818,7 +1821,7 @@ module.exports = class huobipro extends Exchange {
             request = this.keysort (request);
             let auth = this.urlencode (request);
             // unfortunately, PHP demands double quotes for the escaped newline symbol
-            const apiurl = this.urls.api[api];
+            const apiurl = this.safeString(this.urls['api'], api, '');
             const hostname = apiurl.replace ('http://', '').replace ('https://', '');
             // eslint-disable-next-line quotes
             const payload = [ method, hostname, url, auth ].join ("\n");
