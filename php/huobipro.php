@@ -943,15 +943,17 @@ class huobipro extends Exchange {
             $method = 'marketGetHistoryKline';
         } else {
             $request = array(
-                'contract_code' => $market['id'],
                 'period' => $this->timeframes[$timeframe],
             );
             if ($type === 'futures') {
-                $method = 'futuresMarketGetHistoryKline';
+                $request['symbol'] = $symbol;
+                $method = 'futuresMarketGetMarketHistoryKline';
             } else if ($market['quote'] === 'USDT') {
+                $request['contract_code'] = $symbol;
                 $method = 'usdtSwapMarketGetMarketHistoryKline';
             } else {
-                $method = 'swapMarketGetHistoryKline';
+                $request['contract_code'] = $symbol;
+                $method = 'swapMarketGetMarketHistoryKline';
             }
         }
         if ($limit !== null) {
@@ -1473,13 +1475,13 @@ class huobipro extends Exchange {
             $request = array(
                 'contract_code' => $symbol,
                 'order_price_type' => $type,
-                'volume' => $amount,
+                'volume' => intval ($amount),
                 'direction' => $side,
             );
             if ($type === 'market') {
                 $request['order_price_type'] = 'optimal_20';
             } else {
-                $request['price'] = $this->price_to_precision($symbol, $price);
+                $request['price'] = $price;
             }
             if ($market['type'] === 'futures') {
                 $method = 'futuresPrivatePostV1ContractOrder';
@@ -1489,6 +1491,7 @@ class huobipro extends Exchange {
                 $method = 'swapPrivatePostV1SwapOrder';
             }
         }
+        $this->omit($params, 'type');
         $response = $this->$method (array_merge($request, $params));
         $timestamp = $this->milliseconds();
         $id = null;
@@ -1823,7 +1826,7 @@ class huobipro extends Exchange {
             $request = $this->keysort($request);
             $auth = $this->urlencode($request);
             // unfortunately, PHP demands double quotes for the escaped newline symbol
-            $apiurl = $this->urls.api[$api];
+            $apiurl = $this->safe_string($this->urls['api'], $api, '');
             $hostname = str_replace('https://', '', $apiurl->replace ('http://', ''));
             // eslint-disable-next-line quotes
             $payload = implode("\n", array($method, $hostname, $url, $auth));

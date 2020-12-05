@@ -895,15 +895,17 @@ class huobipro(Exchange):
             method = 'marketGetHistoryKline'
         else:
             request = {
-                'contract_code': market['id'],
                 'period': self.timeframes[timeframe],
             }
             if type == 'futures':
-                method = 'futuresMarketGetHistoryKline'
+                request['symbol'] = symbol
+                method = 'futuresMarketGetMarketHistoryKline'
             elif market['quote'] == 'USDT':
+                request['contract_code'] = symbol
                 method = 'usdtSwapMarketGetMarketHistoryKline'
             else:
-                method = 'swapMarketGetHistoryKline'
+                request['contract_code'] = symbol
+                method = 'swapMarketGetMarketHistoryKline'
         if limit is not None:
             request['size'] = limit
         if since is not None:
@@ -1366,19 +1368,20 @@ class huobipro(Exchange):
             request = {
                 'contract_code': symbol,
                 'order_price_type': type,
-                'volume': amount,
+                'volume': int(amount),
                 'direction': side,
             }
             if type == 'market':
                 request['order_price_type'] = 'optimal_20'
             else:
-                request['price'] = self.price_to_precision(symbol, price)
+                request['price'] = price
             if market['type'] == 'futures':
                 method = 'futuresPrivatePostV1ContractOrder'
             elif market['quote'] == 'USDT':
                 method = 'usdtSwapPrivatePostV1SwapOrder'
             else:
                 method = 'swapPrivatePostV1SwapOrder'
+        self.omit(params, 'type')
         response = await getattr(self, method)(self.extend(request, params))
         timestamp = self.milliseconds()
         id = None
@@ -1684,7 +1687,7 @@ class huobipro(Exchange):
             request = self.keysort(request)
             auth = self.urlencode(request)
             # unfortunately, PHP demands double quotes for the escaped newline symbol
-            apiurl = self.urls.api[api]
+            apiurl = self.safe_string(self.urls['api'], api, '')
             hostname = apiurl.replace('http://', '').replace('https://', '')
             # eslint-disable-next-line quotes
             payload = "\n".join([method, hostname, url, auth])
