@@ -1509,7 +1509,7 @@ module.exports = class huobipro extends Exchange {
         };
     }
 
-    async cancelOrder (id, symbol, params = {}) {
+    async cancelOrder (id, symbol = undefined, params = {}) {
         await this.loadMarkets ();
         const market = this.market (symbol);
         const type = market['type'];
