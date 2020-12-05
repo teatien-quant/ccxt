@@ -1493,7 +1493,6 @@ module.exports = class huobipro extends Exchange {
             const data = this.safeValue (response, 'data', {});
             id = this.safeString (data, 'order_id_str');
         }
-        
         return {
             'info': response,
             'id': id,
