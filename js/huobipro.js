@@ -1486,7 +1486,14 @@ module.exports = class huobipro extends Exchange {
         }
         const response = await this[method] (this.extend (request, params));
         const timestamp = this.milliseconds ();
-        const id = this.safeString (response, 'data');
+        let id = undefined;
+        if (market['type'] === 'spot') {
+            id = this.safeString (response, 'data');
+        } else {
+            const data = this.safeValue (response, 'data', {});
+            id = this.safeString (data, 'order_id_str');
+        }
+        
         return {
             'info': response,
             'id': id,
