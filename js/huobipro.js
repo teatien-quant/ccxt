@@ -1486,7 +1486,7 @@ module.exports = class huobipro extends Exchange {
                 method = 'swapPrivatePostV1SwapOrder';
             }
         }
-        self.omit (params, 'type');
+        this.omit (params, 'type');
         const response = await this[method] (this.extend (request, params));
         const timestamp = this.milliseconds ();
         let id = undefined;
@@ -1821,7 +1821,7 @@ module.exports = class huobipro extends Exchange {
             request = this.keysort (request);
             let auth = this.urlencode (request);
             // unfortunately, PHP demands double quotes for the escaped newline symbol
-            const apiurl = this.safeString(this.urls['api'], api, '');
+            const apiurl = this.safeString (this.urls['api'], api, '');
             const hostname = apiurl.replace ('http://', '').replace ('https://', '');
             // eslint-disable-next-line quotes
             const payload = [ method, hostname, url, auth ].join ("\n");
