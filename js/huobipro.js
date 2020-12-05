@@ -179,17 +179,17 @@ module.exports = class huobipro extends Exchange {
                         'v1/contract_order_info',  // 订单信息
                         'v1/contract_order_detail',  // 订单明细,包含交易明细
                         'v1/contract_position_info', // 持仓信息
-                        'v1/contract_account_info',  //账户余额
+                        'v1/contract_account_info',  // 账户余额
                     ],
                 },
                 'usdtSwapPublic': {
                     'get': [
                         'v1/swap_contract_info',
-                    ]
+                    ],
                 },
                 'usdtSwapMarket': {
                     'get': [
-                        'market/history/kline'
+                        'market/history/kline',
                     ],
                 },
                 'usdtSwapPrivate': {
@@ -200,7 +200,7 @@ module.exports = class huobipro extends Exchange {
                         'v1/swap_order_info',  // 订单信息
                         'v1/swap_order_detail',  // 订单明细,包含交易明细
                         'v1/swap_position_info', // 持仓信息
-                        'v1/swap_account_info',  //账户余额
+                        'v1/swap_account_info',  // 账户余额
                     ],
                 },
                 'swapPublic': {
@@ -216,7 +216,7 @@ module.exports = class huobipro extends Exchange {
                         'v1/swap_order_info',  // 订单信息
                         'v1/swap_order_detail',  // 订单明细,包含交易明细
                         'v1/swap_position_info', // 持仓信息
-                        'v1/swap_account_info',  //账户余额
+                        'v1/swap_account_info',  // 账户余额
                     ],
                 },
                 'swapMarket': {
@@ -390,7 +390,7 @@ module.exports = class huobipro extends Exchange {
         //     "funding-leverage-ratio": 3,
         //     "api-trading": "enabled"
         // }
-        // 
+        //
         // futures markets
         // {
         //     "symbol": "BTC",
@@ -402,18 +402,25 @@ module.exports = class huobipro extends Exchange {
         //     "create_date": "20200605",
         //     "contract_status": 1
         // }
-        const contractCode = this.safeString(market, 'contract_code')
-        const contractType = this.safeString(market, 'contract_type')
-        let type = 'spot'
+        const contractCode = this.safeString (market, 'contract_code');
+        const contractType = this.safeString (market, 'contract_type');
+        let type = 'spot';
         if (contractCode !== undefined) {
             if (contractType !== undefined) {
-                type = 'futures'
+                type = 'futures';
             } else {
-                type = 'swap'
+                type = 'swap';
             }
         }
-        let baseId, id, quoteId, base, quote, symbol;
-        let spot, futures, swap;
+        let baseId = '';
+        let id = '';
+        let quoteId = '';
+        let base = '';
+        let quote = '';
+        let symbol = '';
+        let spot = '';
+        let futures = '';
+        let swap = '';
         let precision = {};
         let active = false;
         if (type === 'spot') {
@@ -423,37 +430,37 @@ module.exports = class huobipro extends Exchange {
             base = this.safeCurrencyCode (baseId);
             quote = this.safeCurrencyCode (quoteId);
             symbol = base + '/' + quote;
-            futures = false
-            spot = true
-            swap = false
+            futures = false;
+            spot = true;
+            swap = false;
             precision = {
                 'amount': market['amount-precision'],
                 'price': market['price-precision'],
             };
             active = this.safeString (market, 'state') === 'online';
         } else {
-            id = this.safeString(market, 'contract_code')
+            id = this.safeString (market, 'contract_code');
             if (type === 'swap') {
                 const parts = id.split ('-');
                 baseId = this.safeString (parts, 0);
                 quoteId = this.safeString (parts, 1);
-                futures = false
-                swap = true
+                futures = false;
+                swap = true;
             } else {
-                baseId = this.safeString(market, 'symbol')
-                quoteId = 'USD'
-                futures = true
-                swap = false
+                baseId = this.safeString (market, 'symbol');
+                quoteId = 'USD';
+                futures = true;
+                swap = false;
             }
             base = this.safeCurrencyCode (baseId);
             quote = this.safeCurrencyCode (quoteId);
-            symbol = id
-            spot = false
+            symbol = id;
+            spot = false;
             precision = {
                 'amount': 1,
-                'price': this.safeFloat(market, 'price_tick'),
+                'price': this.safeFloat (market, 'price_tick'),
             };
-            active = this.safeFloat(market, 'contract_status') === 1
+            active = this.safeFloat (market, 'contract_status') === 1;
         }
         const maker = (base === 'OMG') ? 0 : 0.2 / 100;
         const taker = (base === 'OMG') ? 0 : 0.2 / 100;
@@ -496,25 +503,25 @@ module.exports = class huobipro extends Exchange {
 
     async fetchMarketsByType (type, params = {}) {
         if (type === 'spot') {
-            const method = 'publicGetCommonSymbols'
+            const method = 'publicGetCommonSymbols';
             const response = await this[method] (params);
             const markets = this.safeValue (response, 'data');
-            return this.parseMarkets(markets)
+            return this.parseMarkets (markets);
         } else if (type === 'futures') {
             const method = 'futuresPublicGetV1ContractContractInfo';
             const response = await this[method] (params);
             const markets = this.safeValue (response, 'data');
-            return this.parseMarkets(markets)
+            return this.parseMarkets (markets);
         } else if (type === 'usdtSwap') {
             const method = 'usdtSwapPublicGetV1SwapContractInfo';
             const response = await this[method] (params);
             const markets = this.safeValue (response, 'data');
-            return this.parseMarkets(markets);
+            return this.parseMarkets (markets);
         } else if (type === 'swap') {
             const method = 'swapPublicGetV1SwapContractInfo';
             const response = await this[method] (params);
             const markets = this.safeValue (response, 'data');
-            return this.parseMarkets(markets);
+            return this.parseMarkets (markets);
         }
     }
 
@@ -756,10 +763,10 @@ module.exports = class huobipro extends Exchange {
         const takerOrMaker = this.safeString (trade, 'role');
         const price = this.safeFloat2 (trade, 'price', 'trade_price');
         let amount = this.safeFloat2 (trade, 'filled-amount', 'amount');
-        amount = this.safeFloat(trade, 'trade_volume', amount);
+        amount = this.safeFloat (trade, 'trade_volume', amount);
         let cost = undefined;
         if (market !== undefined && market['type'] !== 'spot') {
-            cost = this.safeFloat(trade, 'trade_turnover');
+            cost = this.safeFloat (trade, 'trade_turnover');
         } else if (price !== undefined) {
             if (amount !== undefined) {
                 cost = amount * price;
@@ -805,7 +812,7 @@ module.exports = class huobipro extends Exchange {
 
     async fetchMyTrades (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        let market = this.market(symbol);
+        let market = this.market (symbol);
         const request = {};
         const type = market['type'];
         let method = '';
@@ -834,8 +841,8 @@ module.exports = class huobipro extends Exchange {
                 method = 'swapPrivatePostV1SwapOrderDetail';
             }
         }
-        const orderId = this.safeString2(params, 'order_id', 'id');
-        this.omit(params, 'order_id', 'id');
+        const orderId = this.safeString2 (params, 'order_id', 'id');
+        this.omit (params, 'order_id', 'id');
         if (orderId !== undefined) {
             request['order_id'] = orderId;
         }
@@ -843,8 +850,8 @@ module.exports = class huobipro extends Exchange {
             request['page_size'] = limit;
         }
         const response = await this[method] (this.extend (request, params));
-        const trades = this.safeValue(response['data'], 'trades', []);
-        return this.parseTrades(trades, market, since, limit);
+        const trades = this.safeValue (response['data'], 'trades', []);
+        return this.parseTrades (trades, market, since, limit);
     }
 
     async fetchTrades (symbol, since = undefined, limit = 1000, params = {}) {
@@ -1064,11 +1071,10 @@ module.exports = class huobipro extends Exchange {
         } else {
             method = 'swapPrivatePostV1SwapAccountInfo';
         }
-        console.log(method)
         const response = await this[method] (this.extend (request, params));
         let balances = this.safeValue (response['data'], 'list', []);
         if (type !== 'spot') {
-            balances = this.safeValue(response, 'data', []);
+            balances = this.safeValue (response, 'data', []);
         }
         const result = { 'info': response };
         for (let i = 0; i < balances.length; i++) {
@@ -1090,15 +1096,15 @@ module.exports = class huobipro extends Exchange {
                 }
                 result[code] = account;
             } else {
-                let account = {};
+                const account = {};
                 let code = undefined;
                 if (type === 'futures' && quote === 'USDT') {
-                    code = this.safeString(balance, 'contract_code');
+                    code = this.safeString (balance, 'contract_code');
                 } else {
-                    code = this.safeString(balance, 'symbol');
+                    code = this.safeString (balance, 'symbol');
                 }
-                account['free'] = this.safeFloat(balance, 'margin_available');
-                account['total'] = this.safeFloat(balance, 'margin_balance');
+                account['free'] = this.safeFloat (balance, 'margin_available');
+                account['total'] = this.safeFloat (balance, 'margin_balance');
                 result[code] = account;
             }
         }
@@ -1107,7 +1113,7 @@ module.exports = class huobipro extends Exchange {
 
     async fetchOrdersByStates (states, symbol = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        const market = this.market(symbol);
+        const market = this.market (symbol);
         const type = market['type'];
         let method = undefined;
         const request = {};
@@ -1158,9 +1164,9 @@ module.exports = class huobipro extends Exchange {
 
     async fetchOrder (id, symbol = undefined, params = {}) {
         await this.loadMarkets ();
-        const market = this.market(symbol);
+        const market = this.market (symbol);
         const type = market['type'];
-        let request = {};
+        const request = {};
         let method = undefined;
         if (type === 'spot') {
             request['id'] = id;
@@ -1184,13 +1190,13 @@ module.exports = class huobipro extends Exchange {
             return this.parseOrder (order);
         } else {
             if (order.length <= 0) {
-                throw new OrderNotFound();
+                throw new OrderNotFound ();
             } else if (order.length === 1) {
                 return this.parseOrder (order[0]);
             } else {
-                let result = [];
+                const result = [];
                 for (let i = 0; i < order.length; i++) {
-                    result.push(this.parseOrder (order[i]));
+                    result.push (this.parseOrder (order[i]));
                 }
                 return result;
             }
@@ -1203,14 +1209,13 @@ module.exports = class huobipro extends Exchange {
 
     async fetchOpenOrders (symbol = undefined, since = undefined, limit = undefined, params = {}) {
         await this.loadMarkets ();
-        const market = this.market(symbol);
+        const market = this.market (symbol);
         if (market['type'] === 'spot') {
             const method = this.safeString (this.options, 'fetchOpenOrdersMethod', 'fetch_open_orders_v1');
             return await this[method] (symbol, since, limit, params);
         } else {
             return await this.fetchOrdersByStates ('3,4', symbol, since, limit, params);
         }
-        
     }
 
     async fetchOpenOrdersV1 (symbol = undefined, since = undefined, limit = undefined, params = {}) {
@@ -1330,7 +1335,7 @@ module.exports = class huobipro extends Exchange {
         //             'canceled-at':  0                      }
         //
         const id = this.safeString2 (order, 'id', 'order_id');
-        const clientOrderId = this.safeString(order, 'client_order_id');
+        const clientOrderId = this.safeString (order, 'client_order_id');
         let side = undefined;
         let type = undefined;
         let status = undefined;
@@ -1340,14 +1345,14 @@ module.exports = class huobipro extends Exchange {
             type = orderType[1];
             status = this.parseOrderStatus (this.safeString (order, 'state'));
         } else {
-            side = this.safeString(order, 'direction');
-            const price_type = this.safeString(order, 'order_price_type');
+            side = this.safeString (order, 'direction');
+            const price_type = this.safeString (order, 'order_price_type');
             const price_type_map = {
                 '1': 'limit',
                 '2': 'market',
                 '9': 'market',
-            }
-            type = this.safeString(price_type_map, price_type);
+            };
+            type = this.safeString (price_type_map, price_type);
             status = this.parseOrderStatus (this.safeString (order, 'status'));
         }
         let symbol = undefined;
@@ -1363,10 +1368,10 @@ module.exports = class huobipro extends Exchange {
             symbol = market['symbol'];
         }
         let timestamp = this.safeInteger2 (order, 'created-at', 'create_date');
-        timestamp = this.safeInteger(order, 'created_at', timestamp);
+        timestamp = this.safeInteger (order, 'created_at', timestamp);
         let amount = this.safeFloat2 (order, 'amount', 'volume');
         let filled = this.safeFloat2 (order, 'filled-amount', 'field-amount'); // typo in their API, filled amount
-        filled = this.safeFloat(order, 'trade_volume', filled);
+        filled = this.safeFloat (order, 'trade_volume', filled);
         if ((type === 'market') && (side === 'buy')) {
             amount = (status === 'closed') ? filled : undefined;
         }
@@ -1375,7 +1380,7 @@ module.exports = class huobipro extends Exchange {
             price = undefined;
         }
         let cost = this.safeFloat2 (order, 'filled-cash-amount', 'field-cash-amount'); // same typo
-        cost = this.safeFloat(order, 'trade_turnover', cost);
+        cost = this.safeFloat (order, 'trade_turnover', cost);
         let remaining = undefined;
         let average = undefined;
         if (filled !== undefined) {
@@ -1388,10 +1393,10 @@ module.exports = class huobipro extends Exchange {
             }
         }
         if (type !== 'spot') {
-            average = this.safeFloat(order, 'trade_avg_price');
+            average = this.safeFloat (order, 'trade_avg_price');
         }
         let feeCost = this.safeFloat2 (order, 'filled-fees', 'field-fees'); // typo in their API, filled fees
-        feeCost = this.safeFloat(order, 'fee', feeCost);
+        feeCost = this.safeFloat (order, 'fee', feeCost);
         let fee = undefined;
         if (feeCost !== undefined) {
             let feeCurrency = undefined;
@@ -1427,7 +1432,7 @@ module.exports = class huobipro extends Exchange {
 
     async createOrder (symbol, type, side, amount, price = undefined, params = {}) {
         await this.loadMarkets ();
-        const market = this.market(symbol);
+        const market = this.market (symbol);
         let request = {};
         let method = '';
         if (market['spot'] === true) {
@@ -1505,10 +1510,10 @@ module.exports = class huobipro extends Exchange {
     }
 
     async cancelOrder (id, symbol, params = {}) {
-        await this.loadMarkets();
-        const market = this.market(symbol);
+        await this.loadMarkets ();
+        const market = this.market (symbol);
         const type = market['type'];
-        let request = {};
+        const request = {};
         let method = '';
         if (type === 'spot') {
             request['id'] = id;
@@ -1528,7 +1533,7 @@ module.exports = class huobipro extends Exchange {
                 method = 'swapPrivatePostV1SwapCancel';
             }
         }
-        const response = await this[method] (this.extend(request, params));
+        const response = await this[method] (this.extend (request, params));
         //
         //     let response = {
         //         'status': 'ok',
@@ -1786,9 +1791,9 @@ module.exports = class huobipro extends Exchange {
         } else if (api === 'usdtSwapPrivate' || api === 'usdtSwapPublic') {
             url += 'linear-swap-api';
         } else if (api === 'usdtSwapMarket') {
-            url += 'linear-swap-ex'
+            url += 'linear-swap-ex';
         } else if (api === 'swapMarket') {
-            url += ''
+            url += '';
         }
         url += '/' + this.implodeParams (path, params);
         const query = this.omit (params, this.extractParams (path));
@@ -1807,9 +1812,9 @@ module.exports = class huobipro extends Exchange {
             request = this.keysort (request);
             let auth = this.urlencode (request);
             // unfortunately, PHP demands double quotes for the escaped newline symbol
-            // eslint-disable-next-line quotes
             const apiurl = this.urls.api[api];
-            const hostname = apiurl.replace('http://', '').replace('https://', '');
+            const hostname = apiurl.replace ('http://', '').replace ('https://', '');
+            // eslint-disable-next-line quotes
             const payload = [ method, hostname, url, auth ].join ("\n");
             const signature = this.hmac (this.encode (payload), this.encode (this.secret), 'sha256', 'base64');
             auth += '&' + this.urlencode ({ 'Signature': signature });
