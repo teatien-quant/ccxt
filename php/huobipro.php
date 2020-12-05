@@ -9,6 +9,7 @@ use Exception; // a common import
 use \ccxt\ExchangeError;
 use \ccxt\ArgumentsRequired;
 use \ccxt\InvalidOrder;
+use \ccxt\OrderNotFound;
 
 class huobipro extends Exchange {
 
@@ -60,11 +61,20 @@ class huobipro extends Exchange {
                 ),
                 'logo' => 'https://user-images.githubusercontent.com/1294454/76137448-22748a80-604e-11ea-8069-6e389271911d.jpg',
                 'api' => array(
-                    'market' => 'https://{hostname}',
-                    'public' => 'https://{hostname}',
-                    'private' => 'https://{hostname}',
-                    'v2Public' => 'https://{hostname}',
-                    'v2Private' => 'https://{hostname}',
+                    'market' => 'https://api.huobi.pro',
+                    'public' => 'https://api.huobi.pro',
+                    'private' => 'https://api.huobi.pro',
+                    'v2Public' => 'https://api.huobi.pro',
+                    'v2Private' => 'https://api.huobi.pro',
+                    'futuresPublic' => 'https://api.hbdm.com',
+                    'futuresPrivate' => 'https://api.hbdm.com',
+                    'usdtSwapPublic' => 'https://api.hbdm.com',
+                    'usdtSwapPrivate' => 'https://api.hbdm.com',
+                    'swapPublic' => 'https://api.hbdm.com',
+                    'swapPrivate' => 'https://api.hbdm.com',
+                    'futuresMarket' => 'https://api.hbdm.com',
+                    'swapMarket' => 'https://api.hbdm.com',
+                    'usdtSwapMarket' => 'https://api.hbdm.com',
                 ),
                 'www' => 'https://www.huobi.pro',
                 'referral' => 'https://www.huobi.co/en-us/topic/invited/?invite_code=rwrd3',
@@ -156,6 +166,69 @@ class huobipro extends Exchange {
                         'subuser/transfer',
                     ),
                 ),
+                'futuresPublic' => array(
+                    'get' => array(
+                        'v1/contract_contract_info', // 获取 Market ContractContractInfo
+                    ),
+                ),
+                'futuresMarket' => array(
+                    'get' => array(
+                        'market/history/kline',
+                    ),
+                ),
+                'futuresPrivate' => array(
+                    'post' => array(
+                        'v1/contract_order',  // 下单
+                        'v1/contract_cancel',  // 取消订单
+                        'v1/contract_hisorders',  // 未成交订单
+                        'v1/contract_order_info',  // 订单信息
+                        'v1/contract_order_detail',  // 订单明细,包含交易明细
+                        'v1/contract_position_info', // 持仓信息
+                        'v1/contract_account_info',  // 账户余额
+                    ),
+                ),
+                'usdtSwapPublic' => array(
+                    'get' => array(
+                        'v1/swap_contract_info',
+                    ),
+                ),
+                'usdtSwapMarket' => array(
+                    'get' => array(
+                        'market/history/kline',
+                    ),
+                ),
+                'usdtSwapPrivate' => array(
+                    'post' => array(
+                        'v1/swap_order',
+                        'v1/swap_cancel',  // 取消订单
+                        'v1/swap_hisorders',  // 历史委托
+                        'v1/swap_order_info',  // 订单信息
+                        'v1/swap_order_detail',  // 订单明细,包含交易明细
+                        'v1/swap_position_info', // 持仓信息
+                        'v1/swap_account_info',  // 账户余额
+                    ),
+                ),
+                'swapPublic' => array(
+                    'get' => array(
+                        'v1/swap_contract_info',
+                    ),
+                ),
+                'swapPrivate' => array(
+                    'post' => array(
+                        'v1/swap_order',
+                        'v1/swap_cancel',  // 取消订单
+                        'v1/swap_hisorders',  // 历史委托
+                        'v1/swap_order_info',  // 订单信息
+                        'v1/swap_order_detail',  // 订单明细,包含交易明细
+                        'v1/swap_position_info', // 持仓信息
+                        'v1/swap_account_info',  // 账户余额
+                    ),
+                ),
+                'swapMarket' => array(
+                    'get' => array(
+                        'market/history/kline',
+                    ),
+                ),
             ),
             'fees' => array(
                 'trading' => array(
@@ -201,6 +274,7 @@ class huobipro extends Exchange {
                 'fetchBalanceMethod' => 'privateGetAccountAccountsIdBalance',
                 'createOrderMethod' => 'privatePostOrderOrdersPlace',
                 'language' => 'en-US',
+                'fetchMarkets' => ['spot', 'futures', 'usdtSwap', 'swap'],
             ),
             'commonCurrencies' => array(
                 // https://github.com/ccxt/ccxt/issues/6081
@@ -280,62 +354,180 @@ class huobipro extends Exchange {
     }
 
     public function fetch_markets($params = array ()) {
-        $method = $this->options['fetchMarketsMethod'];
-        $response = $this->$method ($params);
-        $markets = $this->safe_value($response, 'data');
-        $numMarkets = is_array($markets) ? count($markets) : 0;
-        if ($numMarkets < 1) {
-            throw new ExchangeError($this->id . ' publicGetCommonSymbols returned empty $response => ' . $this->json($markets));
+        $types = $this->safe_value($this->options, 'fetchMarkets');
+        $result = array();
+        for ($i = 0; $i < count($types); $i++) {
+            $markets = $this->fetch_markets_by_type($types[$i], $params);
+            $result = $this->array_concat($result, $markets);
         }
+        return $result;
+    }
+
+    public function parse_markets($markets) {
         $result = array();
         for ($i = 0; $i < count($markets); $i++) {
-            $market = $markets[$i];
+            $result[] = $this->parse_market($markets[$i]);
+        }
+        return $result;
+    }
+
+    public function parse_market($market) {
+        //
+        // $spot markets
+        // {
+        //     "$quote-currency" => "usdt",
+        //     "price-$precision" => 2,
+        //     "amount-$precision" => 6,
+        //     "$symbol-partition" => "main",
+        //     "$symbol" => "btcusdt",
+        //     "state" => "online",
+        //     "value-$precision" => 8,
+        //     "min-order-amt" => 0.0001,
+        //     "max-order-amt" => 1000,
+        //     "min-order-value" => 5,
+        //     "limit-order-min-order-amt" => 0.0001,
+        //     "limit-order-max-order-amt" => 1000,
+        //     "sell-$market-min-order-amt" => 0.0001,
+        //     "sell-$market-max-order-amt" => 100,
+        //     "buy-$market-max-order-value" => 1000000,
+        //     "leverage-ratio" => 5,
+        //     "super-margin-leverage-ratio" => 3,
+        //     "funding-leverage-ratio" => 3,
+        //     "api-trading" => "enabled"
+        // }
+        //
+        // $futures markets
+        // {
+        //     "$symbol" => "BTC",
+        //     "contract_code" => "BTC201225",
+        //     "contract_type" => "quarter",
+        //     "contract_size" => 100,
+        //     "price_tick" => 0.01,
+        //     "delivery_date" => "20201225",
+        //     "create_date" => "20200605",
+        //     "contract_status" => 1
+        // }
+        $contractCode = $this->safe_string($market, 'contract_code');
+        $contractType = $this->safe_string($market, 'contract_type');
+        $type = 'spot';
+        if ($contractCode !== null) {
+            if ($contractType !== null) {
+                $type = 'futures';
+            } else {
+                $type = 'swap';
+            }
+        }
+        $baseId = '';
+        $id = '';
+        $quoteId = '';
+        $base = '';
+        $quote = '';
+        $symbol = '';
+        $spot = '';
+        $futures = '';
+        $swap = '';
+        $precision = array();
+        $active = false;
+        if ($type === 'spot') {
             $baseId = $this->safe_string($market, 'base-currency');
             $quoteId = $this->safe_string($market, 'quote-currency');
             $id = $baseId . $quoteId;
             $base = $this->safe_currency_code($baseId);
             $quote = $this->safe_currency_code($quoteId);
             $symbol = $base . '/' . $quote;
+            $futures = false;
+            $spot = true;
+            $swap = false;
             $precision = array(
                 'amount' => $market['amount-precision'],
                 'price' => $market['price-precision'],
             );
-            $maker = ($base === 'OMG') ? 0 : 0.2 / 100;
-            $taker = ($base === 'OMG') ? 0 : 0.2 / 100;
-            $minAmount = $this->safe_float($market, 'min-order-amt', pow(10, -$precision['amount']));
-            $maxAmount = $this->safe_float($market, 'max-order-amt');
-            $minCost = $this->safe_float($market, 'min-order-value', 0);
-            $state = $this->safe_string($market, 'state');
-            $active = ($state === 'online');
-            $result[] = array(
-                'id' => $id,
-                'symbol' => $symbol,
-                'base' => $base,
-                'quote' => $quote,
-                'baseId' => $baseId,
-                'quoteId' => $quoteId,
-                'active' => $active,
-                'precision' => $precision,
-                'taker' => $taker,
-                'maker' => $maker,
-                'limits' => array(
-                    'amount' => array(
-                        'min' => $minAmount,
-                        'max' => $maxAmount,
-                    ),
-                    'price' => array(
-                        'min' => pow(10, -$precision['price']),
-                        'max' => null,
-                    ),
-                    'cost' => array(
-                        'min' => $minCost,
-                        'max' => null,
-                    ),
-                ),
-                'info' => $market,
+            $active = $this->safe_string($market, 'state') === 'online';
+        } else {
+            $id = $this->safe_string($market, 'contract_code');
+            if ($type === 'swap') {
+                $parts = explode('-', $id);
+                $baseId = $this->safe_string($parts, 0);
+                $quoteId = $this->safe_string($parts, 1);
+                $futures = false;
+                $swap = true;
+            } else {
+                $baseId = $this->safe_string($market, 'symbol');
+                $quoteId = 'USD';
+                $futures = true;
+                $swap = false;
+            }
+            $base = $this->safe_currency_code($baseId);
+            $quote = $this->safe_currency_code($quoteId);
+            $symbol = $id;
+            $spot = false;
+            $precision = array(
+                'amount' => 1,
+                'price' => $this->safe_float($market, 'price_tick'),
             );
+            $active = $this->safe_float($market, 'contract_status') === 1;
         }
-        return $result;
+        $maker = ($base === 'OMG') ? 0 : 0.2 / 100;
+        $taker = ($base === 'OMG') ? 0 : 0.2 / 100;
+        $minAmount = $this->safe_float($market, 'min-order-amt', pow(10, -$precision['amount']));
+        $maxAmount = $this->safe_float($market, 'max-order-amt');
+        $minCost = $this->safe_float($market, 'min-order-value', 0);
+        return array(
+            'id' => $id,
+            'symbol' => $symbol,
+            'base' => $base,
+            'quote' => $quote,
+            'baseId' => $baseId,
+            'quoteId' => $quoteId,
+            'active' => $active,
+            'precision' => $precision,
+            'taker' => $taker,
+            'maker' => $maker,
+            'type' => $type,
+            'spot' => $spot,
+            'futures' => $futures,
+            'swap' => $swap,
+            'option' => false,
+            'limits' => array(
+                'amount' => array(
+                    'min' => $minAmount,
+                    'max' => $maxAmount,
+                ),
+                'price' => array(
+                    'min' => pow(10, -$precision['price']),
+                    'max' => null,
+                ),
+                'cost' => array(
+                    'min' => $minCost,
+                    'max' => null,
+                ),
+            ),
+            'info' => $market,
+        );
+    }
+
+    public function fetch_markets_by_type($type, $params = array ()) {
+        if ($type === 'spot') {
+            $method = 'publicGetCommonSymbols';
+            $response = $this->$method ($params);
+            $markets = $this->safe_value($response, 'data');
+            return $this->parse_markets($markets);
+        } else if ($type === 'futures') {
+            $method = 'futuresPublicGetV1ContractContractInfo';
+            $response = $this->$method ($params);
+            $markets = $this->safe_value($response, 'data');
+            return $this->parse_markets($markets);
+        } else if ($type === 'usdtSwap') {
+            $method = 'usdtSwapPublicGetV1SwapContractInfo';
+            $response = $this->$method ($params);
+            $markets = $this->safe_value($response, 'data');
+            return $this->parse_markets($markets);
+        } else if ($type === 'swap') {
+            $method = 'swapPublicGetV1SwapContractInfo';
+            $response = $this->$method ($params);
+            $markets = $this->safe_value($response, 'data');
+            return $this->parse_markets($markets);
+        }
     }
 
     public function parse_ticker($ticker, $market = null) {
@@ -564,7 +756,8 @@ class huobipro extends Exchange {
             $symbol = $market['symbol'];
         }
         $timestamp = $this->safe_integer_2($trade, 'ts', 'created-at');
-        $order = $this->safe_string($trade, 'order-id');
+        $timestamp = $this->safe_integer($trade, 'created_at', $timestamp);
+        $order = $this->safe_string_2($trade, 'order-id', 'order_id');
         $side = $this->safe_string($trade, 'direction');
         $type = $this->safe_string($trade, 'type');
         if ($type !== null) {
@@ -573,16 +766,19 @@ class huobipro extends Exchange {
             $type = $typeParts[1];
         }
         $takerOrMaker = $this->safe_string($trade, 'role');
-        $price = $this->safe_float($trade, 'price');
+        $price = $this->safe_float_2($trade, 'price', 'trade_price');
         $amount = $this->safe_float_2($trade, 'filled-amount', 'amount');
+        $amount = $this->safe_float($trade, 'trade_volume', $amount);
         $cost = null;
-        if ($price !== null) {
+        if ($market !== null && $market['type'] !== 'spot') {
+            $cost = $this->safe_float($trade, 'trade_turnover');
+        } else if ($price !== null) {
             if ($amount !== null) {
                 $cost = $amount * $price;
             }
         }
         $fee = null;
-        $feeCost = $this->safe_float($trade, 'filled-fees');
+        $feeCost = $this->safe_float_2($trade, 'filled-fees', 'trade_fee');
         $feeCurrency = null;
         if ($market !== null) {
             $feeCurrency = ($side === 'buy') ? $market['base'] : $market['quote'];
@@ -621,21 +817,46 @@ class huobipro extends Exchange {
 
     public function fetch_my_trades($symbol = null, $since = null, $limit = null, $params = array ()) {
         $this->load_markets();
-        $market = null;
+        $market = $this->market($symbol);
         $request = array();
-        if ($symbol !== null) {
-            $market = $this->market($symbol);
-            $request['symbol'] = $market['id'];
+        $type = $market['type'];
+        $method = '';
+        if ($type === 'spot') {
+            if ($symbol !== null) {
+                $market = $this->market($symbol);
+                $request['symbol'] = $market['id'];
+            }
+            if ($limit !== null) {
+                $request['size'] = $limit; // 1-100 orders, default is 100
+            }
+            if ($since !== null) {
+                $request['start-date'] = $this->ymd($since); // maximum query window size is 2 days, query window shift should be within past 120 days
+            }
+            $response = $this->privateGetOrderMatchresults (array_merge($request, $params));
+            $trades = $this->parse_trades($response['data'], $market, $since, $limit);
+            return $trades;
+        } else if ($type === 'futures') {
+            $request['symbol'] = $market['base'];
+            $method = 'futuresPrivatePostV1ContractOrderDetail';
+        } else {
+            $request['contract_code'] = $symbol;
+            if ($market['quote'] === 'USDT') {
+                $method = 'usdtSwapPrivatePostV1SwapOrderDetail';
+            } else {
+                $method = 'swapPrivatePostV1SwapOrderDetail';
+            }
+        }
+        $orderId = $this->safe_string_2($params, 'order_id', 'id');
+        $this->omit($params, 'order_id', 'id');
+        if ($orderId !== null) {
+            $request['order_id'] = $orderId;
         }
         if ($limit !== null) {
-            $request['size'] = $limit; // 1-100 orders, default is 100
+            $request['page_size'] = $limit;
         }
-        if ($since !== null) {
-            $request['start-date'] = $this->ymd($since); // maximum query window size is 2 days, query window shift should be within past 120 days
-        }
-        $response = $this->privateGetOrderMatchresults (array_merge($request, $params));
-        $trades = $this->parse_trades($response['data'], $market, $since, $limit);
-        return $trades;
+        $response = $this->$method (array_merge($request, $params));
+        $trades = $this->safe_value($response['data'], 'trades', array());
+        return $this->parse_trades($trades, $market, $since, $limit);
     }
 
     public function fetch_trades($symbol, $since = null, $limit = 1000, $params = array ()) {
@@ -711,14 +932,35 @@ class huobipro extends Exchange {
     public function fetch_ohlcv($symbol, $timeframe = '1m', $since = null, $limit = 1000, $params = array ()) {
         $this->load_markets();
         $market = $this->market($symbol);
-        $request = array(
-            'symbol' => $market['id'],
-            'period' => $this->timeframes[$timeframe],
-        );
+        $type = $market['type'];
+        $request = array();
+        $method = '';
+        if ($type === 'spot') {
+            $request = array(
+                'symbol' => $market['id'],
+                'period' => $this->timeframes[$timeframe],
+            );
+            $method = 'marketGetHistoryKline';
+        } else {
+            $request = array(
+                'contract_code' => $market['id'],
+                'period' => $this->timeframes[$timeframe],
+            );
+            if ($type === 'futures') {
+                $method = 'futuresMarketGetHistoryKline';
+            } else if ($market['quote'] === 'USDT') {
+                $method = 'usdtSwapMarketGetMarketHistoryKline';
+            } else {
+                $method = 'swapMarketGetHistoryKline';
+            }
+        }
         if ($limit !== null) {
             $request['size'] = $limit;
         }
-        $response = $this->marketGetHistoryKline (array_merge($request, $params));
+        if ($since !== null) {
+            $request['from'] = intval ($since / 1000);
+        }
+        $response = $this->$method (array_merge($request, $params));
         //
         //     {
         //         "status":"ok",
@@ -818,45 +1060,88 @@ class huobipro extends Exchange {
     public function fetch_balance($params = array ()) {
         $this->load_markets();
         $this->load_accounts();
-        $method = $this->options['fetchBalanceMethod'];
-        $request = array(
-            'id' => $this->accounts[0]['id'],
-        );
+        $type = $this->safe_string($params, 'type', 'spot');
+        $quote = $this->safe_string($params, 'quote', '');
+        $method = '';
+        $request = array();
+        if ($type === 'spot') {
+            $request = array(
+                'id' => $this->accounts[0]['id'],
+            );
+            $method = $this->options['fetchBalanceMethod'];
+        } else if ($type === 'futures') {
+            $method = 'futuresPrivatePostV1ContractAccountInfo';
+        } else if ($quote === 'USDT') {
+            $method = 'usdtSwapPrivatePostV1SwapAccountInfo';
+        } else {
+            $method = 'swapPrivatePostV1SwapAccountInfo';
+        }
         $response = $this->$method (array_merge($request, $params));
         $balances = $this->safe_value($response['data'], 'list', array());
+        if ($type !== 'spot') {
+            $balances = $this->safe_value($response, 'data', array());
+        }
         $result = array( 'info' => $response );
         for ($i = 0; $i < count($balances); $i++) {
             $balance = $balances[$i];
-            $currencyId = $this->safe_string($balance, 'currency');
-            $code = $this->safe_currency_code($currencyId);
-            $account = null;
-            if (is_array($result) && array_key_exists($code, $result)) {
-                $account = $result[$code];
+            if ($type === 'spot') {
+                $currencyId = $this->safe_string($balance, 'currency');
+                $code = $this->safe_currency_code($currencyId);
+                $account = null;
+                if (is_array($result) && array_key_exists($code, $result)) {
+                    $account = $result[$code];
+                } else {
+                    $account = $this->account();
+                }
+                if ($balance['type'] === 'trade') {
+                    $account['free'] = $this->safe_float_2($balance, 'balance');
+                }
+                if ($balance['type'] === 'frozen') {
+                    $account['used'] = $this->safe_float_2($balance, 'balance');
+                }
+                $result[$code] = $account;
             } else {
-                $account = $this->account();
+                $account = array();
+                $code = null;
+                if ($type === 'futures' && $quote === 'USDT') {
+                    $code = $this->safe_string($balance, 'contract_code');
+                } else {
+                    $code = $this->safe_string($balance, 'symbol');
+                }
+                $account['free'] = $this->safe_float($balance, 'margin_available');
+                $account['total'] = $this->safe_float($balance, 'margin_balance');
+                $result[$code] = $account;
             }
-            if ($balance['type'] === 'trade') {
-                $account['free'] = $this->safe_float($balance, 'balance');
-            }
-            if ($balance['type'] === 'frozen') {
-                $account['used'] = $this->safe_float($balance, 'balance');
-            }
-            $result[$code] = $account;
         }
         return $this->parse_balance($result);
     }
 
     public function fetch_orders_by_states($states, $symbol = null, $since = null, $limit = null, $params = array ()) {
         $this->load_markets();
-        $request = array(
-            'states' => $states,
-        );
-        $market = null;
-        if ($symbol !== null) {
-            $market = $this->market($symbol);
+        $market = $this->market($symbol);
+        $type = $market['type'];
+        $method = null;
+        $request = array();
+        if ($type === 'spot') {
             $request['symbol'] = $market['id'];
+            $request['states'] = $states;
+            $method = $this->safe_string($this->options, 'fetchOrdersByStatesMethod', 'private_get_order_orders');
+        } else {
+            $request['contract_code'] = $symbol;
+            $request['trade_type'] = 0;
+            $request['type'] = 1;
+            $request['create_date'] = 90;
+            $request['page_size'] = 50;
+            $request['status'] = $states;
+            if ($type === 'futures') {
+                $request['symbol'] = $market['base'];
+                $method = 'futuresPrivatePostV1ContractHisorders';
+            } else if ($market['quote'] === 'USDT') {
+                $method = 'usdtSwapPrivatePostV1SwapHisorders';
+            } else {
+                $method = 'swapPrivatePostV1SwapHisorders';
+            }
         }
-        $method = $this->safe_string($this->options, 'fetchOrdersByStatesMethod', 'private_get_order_orders');
         $response = $this->$method (array_merge($request, $params));
         //
         //     { status =>   "ok",
@@ -866,7 +1151,7 @@ class huobipro extends Exchange {
         //                                amount => "0.045000000000000000",
         //                                 price => "0.034014000000000000",
         //                          'created-at' =>  1545836976871,
-        //                                  type => "sell-$limit",
+        //                                  $type => "sell-$limit",
         //                        'field-amount' => "0.045000000000000000",
         //                   'field-cash-amount' => "0.001530630000000000",
         //                          'field-fees' => "0.000003061260000000",
@@ -875,17 +1160,52 @@ class huobipro extends Exchange {
         //                                 state => "filled",
         //                         'canceled-at' =>  0                      }  ) }
         //
-        return $this->parse_orders($response['data'], $market, $since, $limit);
+        if ($type === 'spot') {
+            return $this->parse_orders($response['data'], $market, $since, $limit);
+        } else {
+            return $this->parse_orders($response['data']['orders'], $market, $since, $limit);
+        }
     }
 
     public function fetch_order($id, $symbol = null, $params = array ()) {
         $this->load_markets();
-        $request = array(
-            'id' => $id,
-        );
-        $response = $this->privateGetOrderOrdersId (array_merge($request, $params));
+        $market = $this->market($symbol);
+        $type = $market['type'];
+        $request = array();
+        $method = null;
+        if ($type === 'spot') {
+            $request['id'] = $id;
+            $method = 'privateGetOrderOrdersId';
+        } else if ($id) {
+            $request['order_id'] = $id;
+        }
+        if ($type === 'futures') {
+            $request['symbol'] = $market['base'];
+            $method = 'futuresPrivatePostV1ContractOrderInfo';
+        } else if ($type === 'swap' && $market['quote'] === 'USDT') {
+            $request['contract_code'] = $symbol;
+            $method = 'usdtSwapPrivatePostV1SwapOrderInfo';
+        } else {
+            $request['contract_code'] = $symbol;
+            $method = 'swapPrivatePostV1SwapOrderInfo';
+        }
+        $response = $this->$method (array_merge($request, $params));
         $order = $this->safe_value($response, 'data');
-        return $this->parse_order($order);
+        if ($type === 'spot') {
+            return $this->parse_order($order);
+        } else {
+            if (strlen($order) <= 0) {
+                throw new OrderNotFound();
+            } else if (strlen($order) === 1) {
+                return $this->parse_order($order[0]);
+            } else {
+                $result = array();
+                for ($i = 0; $i < count($order); $i++) {
+                    $result[] = $this->parse_order($order[$i]);
+                }
+                return $result;
+            }
+        }
     }
 
     public function fetch_orders($symbol = null, $since = null, $limit = null, $params = array ()) {
@@ -893,8 +1213,14 @@ class huobipro extends Exchange {
     }
 
     public function fetch_open_orders($symbol = null, $since = null, $limit = null, $params = array ()) {
-        $method = $this->safe_string($this->options, 'fetchOpenOrdersMethod', 'fetch_open_orders_v1');
-        return $this->$method ($symbol, $since, $limit, $params);
+        $this->load_markets();
+        $market = $this->market($symbol);
+        if ($market['type'] === 'spot') {
+            $method = $this->safe_string($this->options, 'fetchOpenOrdersMethod', 'fetch_open_orders_v1');
+            return $this->$method ($symbol, $since, $limit, $params);
+        } else {
+            return $this->fetch_orders_by_states('3,4', $symbol, $since, $limit, $params);
+        }
     }
 
     public function fetch_open_orders_v1($symbol = null, $since = null, $limit = null, $params = array ()) {
@@ -969,6 +1295,14 @@ class huobipro extends Exchange {
             'filled' => 'closed',
             'canceled' => 'canceled',
             'submitted' => 'open',
+            '1' => 'open',
+            '2' => 'open',
+            '3' => 'open',
+            '4' => 'open',
+            '5' => 'canceled',
+            '6' => 'closed',
+            '7' => 'canceled',
+            '11' => 'canceling',
         );
         return $this->safe_string($statuses, $status, $status);
     }
@@ -1005,7 +1339,8 @@ class huobipro extends Exchange {
         //                     state => "$filled",
         //             'canceled-at' =>  0                      }
         //
-        $id = $this->safe_string($order, 'id');
+        $id = $this->safe_string_2($order, 'id', 'order_id');
+        $clientOrderId = $this->safe_string($order, 'client_order_id');
         $side = null;
         $type = null;
         $status = null;
@@ -1014,6 +1349,16 @@ class huobipro extends Exchange {
             $side = $orderType[0];
             $type = $orderType[1];
             $status = $this->parse_order_status($this->safe_string($order, 'state'));
+        } else {
+            $side = $this->safe_string($order, 'direction');
+            $price_type = $this->safe_string($order, 'order_price_type');
+            $price_type_map = array(
+                '1' => 'limit',
+                '2' => 'market',
+                '9' => 'market',
+            );
+            $type = $this->safe_string($price_type_map, $price_type);
+            $status = $this->parse_order_status($this->safe_string($order, 'status'));
         }
         $symbol = null;
         if ($market === null) {
@@ -1027,9 +1372,11 @@ class huobipro extends Exchange {
         if ($market !== null) {
             $symbol = $market['symbol'];
         }
-        $timestamp = $this->safe_integer($order, 'created-at');
-        $amount = $this->safe_float($order, 'amount');
+        $timestamp = $this->safe_integer_2($order, 'created-at', 'create_date');
+        $timestamp = $this->safe_integer($order, 'created_at', $timestamp);
+        $amount = $this->safe_float_2($order, 'amount', 'volume');
         $filled = $this->safe_float_2($order, 'filled-amount', 'field-amount'); // typo in their API, $filled $amount
+        $filled = $this->safe_float($order, 'trade_volume', $filled);
         if (($type === 'market') && ($side === 'buy')) {
             $amount = ($status === 'closed') ? $filled : null;
         }
@@ -1038,6 +1385,7 @@ class huobipro extends Exchange {
             $price = null;
         }
         $cost = $this->safe_float_2($order, 'filled-cash-amount', 'field-cash-amount'); // same typo
+        $cost = $this->safe_float($order, 'trade_turnover', $cost);
         $remaining = null;
         $average = null;
         if ($filled !== null) {
@@ -1049,7 +1397,11 @@ class huobipro extends Exchange {
                 $average = $cost / $filled;
             }
         }
+        if ($type !== 'spot') {
+            $average = $this->safe_float($order, 'trade_avg_price');
+        }
         $feeCost = $this->safe_float_2($order, 'filled-fees', 'field-fees'); // typo in their API, $filled fees
+        $feeCost = $this->safe_float($order, 'fee', $feeCost);
         $fee = null;
         if ($feeCost !== null) {
             $feeCurrency = null;
@@ -1064,7 +1416,7 @@ class huobipro extends Exchange {
         return array(
             'info' => $order,
             'id' => $id,
-            'clientOrderId' => null,
+            'clientOrderId' => $clientOrderId,
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601($timestamp),
             'lastTradeTimestamp' => null,
@@ -1085,38 +1437,67 @@ class huobipro extends Exchange {
 
     public function create_order($symbol, $type, $side, $amount, $price = null, $params = array ()) {
         $this->load_markets();
-        $this->load_accounts();
         $market = $this->market($symbol);
-        $request = array(
-            'account-id' => $this->accounts[0]['id'],
-            'symbol' => $market['id'],
-            'type' => $side . '-' . $type,
-        );
-        if (($type === 'market') && ($side === 'buy')) {
-            if ($this->options['createMarketBuyOrderRequiresPrice']) {
-                if ($price === null) {
-                    throw new InvalidOrder($this->id . " $market buy order requires $price argument to calculate cost (total $amount of quote currency to spend for buying, $amount * $price). To switch off this warning exception and specify cost in the $amount argument, set .options['createMarketBuyOrderRequiresPrice'] = false. Make sure you know what you're doing.");
+        $request = array();
+        $method = '';
+        if ($market['spot'] === true) {
+            $this->load_accounts();
+            $request = array(
+                'account-id' => $this->accounts[0]['id'],
+                'symbol' => $market['id'],
+                'type' => $side . '-' . $type,
+            );
+            if (($type === 'market') && ($side === 'buy')) {
+                if ($this->options['createMarketBuyOrderRequiresPrice']) {
+                    if ($price === null) {
+                        throw new InvalidOrder($this->id . " $market buy order requires $price argument to calculate cost (total $amount of quote currency to spend for buying, $amount * $price). To switch off this warning exception and specify cost in the $amount argument, set .options['createMarketBuyOrderRequiresPrice'] = false. Make sure you know what you're doing.");
+                    } else {
+                        // despite that cost = $amount * $price is in quote currency and should have quote precision
+                        // the exchange API requires the cost supplied in 'amount' to be of base precision
+                        // more about it here => https://github.com/ccxt/ccxt/pull/4395
+                        // we use priceToPrecision instead of amountToPrecision here
+                        // because in this case the $amount is in the quote currency
+                        $request['amount'] = $this->cost_to_precision($symbol, floatval ($amount) * floatval ($price));
+                    }
                 } else {
-                    // despite that cost = $amount * $price is in quote currency and should have quote precision
-                    // the exchange API requires the cost supplied in 'amount' to be of base precision
-                    // more about it here => https://github.com/ccxt/ccxt/pull/4395
-                    // we use priceToPrecision instead of amountToPrecision here
-                    // because in this case the $amount is in the quote currency
-                    $request['amount'] = $this->cost_to_precision($symbol, floatval ($amount) * floatval ($price));
+                    $request['amount'] = $this->cost_to_precision($symbol, $amount);
                 }
             } else {
-                $request['amount'] = $this->cost_to_precision($symbol, $amount);
+                $request['amount'] = $this->amount_to_precision($symbol, $amount);
             }
+            if ($type === 'limit' || $type === 'ioc' || $type === 'limit-maker') {
+                $request['price'] = $this->price_to_precision($symbol, $price);
+            }
+            $method = $this->options['createOrderMethod'];
         } else {
-            $request['amount'] = $this->amount_to_precision($symbol, $amount);
+            $request = array(
+                'contract_code' => $symbol,
+                'order_price_type' => $type,
+                'volume' => $amount,
+                'direction' => $side,
+            );
+            if ($type === 'market') {
+                $request['order_price_type'] = 'optimal_20';
+            } else {
+                $request['price'] = $this->price_to_precision($symbol, $price);
+            }
+            if ($market['type'] === 'futures') {
+                $method = 'futuresPrivatePostV1ContractOrder';
+            } else if ($market['quote'] === 'USDT') {
+                $method = 'usdtSwapPrivatePostV1SwapOrder';
+            } else {
+                $method = 'swapPrivatePostV1SwapOrder';
+            }
         }
-        if ($type === 'limit' || $type === 'ioc' || $type === 'limit-maker') {
-            $request['price'] = $this->price_to_precision($symbol, $price);
-        }
-        $method = $this->options['createOrderMethod'];
         $response = $this->$method (array_merge($request, $params));
         $timestamp = $this->milliseconds();
-        $id = $this->safe_string($response, 'data');
+        $id = null;
+        if ($market['type'] === 'spot') {
+            $id = $this->safe_string($response, 'data');
+        } else {
+            $data = $this->safe_value($response, 'data', array());
+            $id = $this->safe_string($data, 'order_id_str');
+        }
         return array(
             'info' => $response,
             'id' => $id,
@@ -1140,7 +1521,30 @@ class huobipro extends Exchange {
     }
 
     public function cancel_order($id, $symbol = null, $params = array ()) {
-        $response = $this->privatePostOrderOrdersIdSubmitcancel (array( 'id' => $id ));
+        $this->load_markets();
+        $market = $this->market($symbol);
+        $type = $market['type'];
+        $request = array();
+        $method = '';
+        if ($type === 'spot') {
+            $request['id'] = $id;
+            $method = 'privatePostOrderOrdersIdSubmitcancel';
+        } else {
+            if ($id !== null) {
+                $request['order_id'] = $id;
+            }
+            if ($type === 'futures') {
+                $request['symbol'] = $market['base'];
+                $method = 'futuresPrivatePostV1ContractCancel';
+            } else if ($type === 'swap' && $market['quote'] === 'USDT') {
+                $request['contract_code'] = $symbol;
+                $method = 'usdtSwapPrivatePostV1SwapCancel';
+            } else {
+                $request['contract_code'] = $symbol;
+                $method = 'swapPrivatePostV1SwapCancel';
+            }
+        }
+        $response = $this->$method (array_merge($request, $params));
         //
         //     $response = array(
         //         'status' => 'ok',
@@ -1391,10 +1795,20 @@ class huobipro extends Exchange {
             $url .= $this->version;
         } else if (($api === 'v2Public') || ($api === 'v2Private')) {
             $url .= 'v2';
+        } else if ($api === 'futuresPrivate' || $api === 'futuresPublic') {
+            $url .= 'api';
+        } else if ($api === 'swapPrivate' || $api === 'swapPublic') {
+            $url .= 'swap-api';
+        } else if ($api === 'usdtSwapPrivate' || $api === 'usdtSwapPublic') {
+            $url .= 'linear-swap-api';
+        } else if ($api === 'usdtSwapMarket') {
+            $url .= 'linear-swap-ex';
+        } else if ($api === 'swapMarket') {
+            $url .= '';
         }
         $url .= '/' . $this->implode_params($path, $params);
         $query = $this->omit($params, $this->extract_params($path));
-        if ($api === 'private' || $api === 'v2Private') {
+        if ($api === 'private' || $api === 'v2Private' || $api === 'futuresPrivate' || $api === 'swapPrivate' || $api === 'usdtSwapPrivate') {
             $this->check_required_credentials();
             $timestamp = $this->ymdhms($this->milliseconds(), 'T');
             $request = array(
@@ -1409,8 +1823,10 @@ class huobipro extends Exchange {
             $request = $this->keysort($request);
             $auth = $this->urlencode($request);
             // unfortunately, PHP demands double quotes for the escaped newline symbol
+            $apiurl = $this->urls.api[$api];
+            $hostname = str_replace('https://', '', $apiurl->replace ('http://', ''));
             // eslint-disable-next-line quotes
-            $payload = implode("\n", array($method, $this->hostname, $url, $auth));
+            $payload = implode("\n", array($method, $hostname, $url, $auth));
             $signature = $this->hmac($this->encode($payload), $this->encode($this->secret), 'sha256', 'base64');
             $auth .= '&' . $this->urlencode(array( 'Signature' => $signature ));
             $url .= '?' . $auth;

@@ -70,11 +70,20 @@ class huobipro(Exchange):
                 },
                 'logo': 'https://user-images.githubusercontent.com/1294454/76137448-22748a80-604e-11ea-8069-6e389271911d.jpg',
                 'api': {
-                    'market': 'https://{hostname}',
-                    'public': 'https://{hostname}',
-                    'private': 'https://{hostname}',
-                    'v2Public': 'https://{hostname}',
-                    'v2Private': 'https://{hostname}',
+                    'market': 'https://api.huobi.pro',
+                    'public': 'https://api.huobi.pro',
+                    'private': 'https://api.huobi.pro',
+                    'v2Public': 'https://api.huobi.pro',
+                    'v2Private': 'https://api.huobi.pro',
+                    'futuresPublic': 'https://api.hbdm.com',
+                    'futuresPrivate': 'https://api.hbdm.com',
+                    'usdtSwapPublic': 'https://api.hbdm.com',
+                    'usdtSwapPrivate': 'https://api.hbdm.com',
+                    'swapPublic': 'https://api.hbdm.com',
+                    'swapPrivate': 'https://api.hbdm.com',
+                    'futuresMarket': 'https://api.hbdm.com',
+                    'swapMarket': 'https://api.hbdm.com',
+                    'usdtSwapMarket': 'https://api.hbdm.com',
                 },
                 'www': 'https://www.huobi.pro',
                 'referral': 'https://www.huobi.co/en-us/topic/invited/?invite_code=rwrd3',
@@ -166,6 +175,69 @@ class huobipro(Exchange):
                         'subuser/transfer',
                     ],
                 },
+                'futuresPublic': {
+                    'get': [
+                        'v1/contract_contract_info',  # 获取 Market ContractContractInfo
+                    ],
+                },
+                'futuresMarket': {
+                    'get': [
+                        'market/history/kline',
+                    ],
+                },
+                'futuresPrivate': {
+                    'post': [
+                        'v1/contract_order',  # 下单
+                        'v1/contract_cancel',  # 取消订单
+                        'v1/contract_hisorders',  # 未成交订单
+                        'v1/contract_order_info',  # 订单信息
+                        'v1/contract_order_detail',  # 订单明细,包含交易明细
+                        'v1/contract_position_info',  # 持仓信息
+                        'v1/contract_account_info',  # 账户余额
+                    ],
+                },
+                'usdtSwapPublic': {
+                    'get': [
+                        'v1/swap_contract_info',
+                    ],
+                },
+                'usdtSwapMarket': {
+                    'get': [
+                        'market/history/kline',
+                    ],
+                },
+                'usdtSwapPrivate': {
+                    'post': [
+                        'v1/swap_order',
+                        'v1/swap_cancel',  # 取消订单
+                        'v1/swap_hisorders',  # 历史委托
+                        'v1/swap_order_info',  # 订单信息
+                        'v1/swap_order_detail',  # 订单明细,包含交易明细
+                        'v1/swap_position_info',  # 持仓信息
+                        'v1/swap_account_info',  # 账户余额
+                    ],
+                },
+                'swapPublic': {
+                    'get': [
+                        'v1/swap_contract_info',
+                    ],
+                },
+                'swapPrivate': {
+                    'post': [
+                        'v1/swap_order',
+                        'v1/swap_cancel',  # 取消订单
+                        'v1/swap_hisorders',  # 历史委托
+                        'v1/swap_order_info',  # 订单信息
+                        'v1/swap_order_detail',  # 订单明细,包含交易明细
+                        'v1/swap_position_info',  # 持仓信息
+                        'v1/swap_account_info',  # 账户余额
+                    ],
+                },
+                'swapMarket': {
+                    'get': [
+                        'market/history/kline',
+                    ],
+                },
             },
             'fees': {
                 'trading': {
@@ -211,6 +283,7 @@ class huobipro(Exchange):
                 'fetchBalanceMethod': 'privateGetAccountAccountsIdBalance',
                 'createOrderMethod': 'privatePostOrderOrdersPlace',
                 'language': 'en-US',
+                'fetchMarkets': ['spot', 'futures', 'usdtSwap', 'swap'],
             },
             'commonCurrencies': {
                 # https://github.com/ccxt/ccxt/issues/6081
@@ -284,60 +357,170 @@ class huobipro(Exchange):
         }
 
     async def fetch_markets(self, params={}):
-        method = self.options['fetchMarketsMethod']
-        response = await getattr(self, method)(params)
-        markets = self.safe_value(response, 'data')
-        numMarkets = len(markets)
-        if numMarkets < 1:
-            raise ExchangeError(self.id + ' publicGetCommonSymbols returned empty response: ' + self.json(markets))
+        types = self.safe_value(self.options, 'fetchMarkets')
+        result = []
+        for i in range(0, len(types)):
+            markets = await self.fetch_markets_by_type(types[i], params)
+            result = self.array_concat(result, markets)
+        return result
+
+    def parse_markets(self, markets):
         result = []
         for i in range(0, len(markets)):
-            market = markets[i]
+            result.append(self.parse_market(markets[i]))
+        return result
+
+    def parse_market(self, market):
+        #
+        # spot markets
+        # {
+        #     "quote-currency": "usdt",
+        #     "price-precision": 2,
+        #     "amount-precision": 6,
+        #     "symbol-partition": "main",
+        #     "symbol": "btcusdt",
+        #     "state": "online",
+        #     "value-precision": 8,
+        #     "min-order-amt": 0.0001,
+        #     "max-order-amt": 1000,
+        #     "min-order-value": 5,
+        #     "limit-order-min-order-amt": 0.0001,
+        #     "limit-order-max-order-amt": 1000,
+        #     "sell-market-min-order-amt": 0.0001,
+        #     "sell-market-max-order-amt": 100,
+        #     "buy-market-max-order-value": 1000000,
+        #     "leverage-ratio": 5,
+        #     "super-margin-leverage-ratio": 3,
+        #     "funding-leverage-ratio": 3,
+        #     "api-trading": "enabled"
+        # }
+        #
+        # futures markets
+        # {
+        #     "symbol": "BTC",
+        #     "contract_code": "BTC201225",
+        #     "contract_type": "quarter",
+        #     "contract_size": 100,
+        #     "price_tick": 0.01,
+        #     "delivery_date": "20201225",
+        #     "create_date": "20200605",
+        #     "contract_status": 1
+        # }
+        contractCode = self.safe_string(market, 'contract_code')
+        contractType = self.safe_string(market, 'contract_type')
+        type = 'spot'
+        if contractCode is not None:
+            if contractType is not None:
+                type = 'futures'
+            else:
+                type = 'swap'
+        baseId = ''
+        id = ''
+        quoteId = ''
+        base = ''
+        quote = ''
+        symbol = ''
+        spot = ''
+        futures = ''
+        swap = ''
+        precision = {}
+        active = False
+        if type == 'spot':
             baseId = self.safe_string(market, 'base-currency')
             quoteId = self.safe_string(market, 'quote-currency')
             id = baseId + quoteId
             base = self.safe_currency_code(baseId)
             quote = self.safe_currency_code(quoteId)
             symbol = base + '/' + quote
+            futures = False
+            spot = True
+            swap = False
             precision = {
                 'amount': market['amount-precision'],
                 'price': market['price-precision'],
             }
-            maker = 0 if (base == 'OMG') else 0.2 / 100
-            taker = 0 if (base == 'OMG') else 0.2 / 100
-            minAmount = self.safe_float(market, 'min-order-amt', math.pow(10, -precision['amount']))
-            maxAmount = self.safe_float(market, 'max-order-amt')
-            minCost = self.safe_float(market, 'min-order-value', 0)
-            state = self.safe_string(market, 'state')
-            active = (state == 'online')
-            result.append({
-                'id': id,
-                'symbol': symbol,
-                'base': base,
-                'quote': quote,
-                'baseId': baseId,
-                'quoteId': quoteId,
-                'active': active,
-                'precision': precision,
-                'taker': taker,
-                'maker': maker,
-                'limits': {
-                    'amount': {
-                        'min': minAmount,
-                        'max': maxAmount,
-                    },
-                    'price': {
-                        'min': math.pow(10, -precision['price']),
-                        'max': None,
-                    },
-                    'cost': {
-                        'min': minCost,
-                        'max': None,
-                    },
+            active = self.safe_string(market, 'state') == 'online'
+        else:
+            id = self.safe_string(market, 'contract_code')
+            if type == 'swap':
+                parts = id.split('-')
+                baseId = self.safe_string(parts, 0)
+                quoteId = self.safe_string(parts, 1)
+                futures = False
+                swap = True
+            else:
+                baseId = self.safe_string(market, 'symbol')
+                quoteId = 'USD'
+                futures = True
+                swap = False
+            base = self.safe_currency_code(baseId)
+            quote = self.safe_currency_code(quoteId)
+            symbol = id
+            spot = False
+            precision = {
+                'amount': 1,
+                'price': self.safe_float(market, 'price_tick'),
+            }
+            active = self.safe_float(market, 'contract_status') == 1
+        maker = 0 if (base == 'OMG') else 0.2 / 100
+        taker = 0 if (base == 'OMG') else 0.2 / 100
+        minAmount = self.safe_float(market, 'min-order-amt', math.pow(10, -precision['amount']))
+        maxAmount = self.safe_float(market, 'max-order-amt')
+        minCost = self.safe_float(market, 'min-order-value', 0)
+        return {
+            'id': id,
+            'symbol': symbol,
+            'base': base,
+            'quote': quote,
+            'baseId': baseId,
+            'quoteId': quoteId,
+            'active': active,
+            'precision': precision,
+            'taker': taker,
+            'maker': maker,
+            'type': type,
+            'spot': spot,
+            'futures': futures,
+            'swap': swap,
+            'option': False,
+            'limits': {
+                'amount': {
+                    'min': minAmount,
+                    'max': maxAmount,
                 },
-                'info': market,
-            })
-        return result
+                'price': {
+                    'min': math.pow(10, -precision['price']),
+                    'max': None,
+                },
+                'cost': {
+                    'min': minCost,
+                    'max': None,
+                },
+            },
+            'info': market,
+        }
+
+    async def fetch_markets_by_type(self, type, params={}):
+        if type == 'spot':
+            method = 'publicGetCommonSymbols'
+            response = await getattr(self, method)(params)
+            markets = self.safe_value(response, 'data')
+            return self.parse_markets(markets)
+        elif type == 'futures':
+            method = 'futuresPublicGetV1ContractContractInfo'
+            response = await getattr(self, method)(params)
+            markets = self.safe_value(response, 'data')
+            return self.parse_markets(markets)
+        elif type == 'usdtSwap':
+            method = 'usdtSwapPublicGetV1SwapContractInfo'
+            response = await getattr(self, method)(params)
+            markets = self.safe_value(response, 'data')
+            return self.parse_markets(markets)
+        elif type == 'swap':
+            method = 'swapPublicGetV1SwapContractInfo'
+            response = await getattr(self, method)(params)
+            markets = self.safe_value(response, 'data')
+            return self.parse_markets(markets)
 
     def parse_ticker(self, ticker, market=None):
         #
@@ -546,7 +729,8 @@ class huobipro(Exchange):
         if market is not None:
             symbol = market['symbol']
         timestamp = self.safe_integer_2(trade, 'ts', 'created-at')
-        order = self.safe_string(trade, 'order-id')
+        timestamp = self.safe_integer(trade, 'created_at', timestamp)
+        order = self.safe_string_2(trade, 'order-id', 'order_id')
         side = self.safe_string(trade, 'direction')
         type = self.safe_string(trade, 'type')
         if type is not None:
@@ -554,14 +738,17 @@ class huobipro(Exchange):
             side = typeParts[0]
             type = typeParts[1]
         takerOrMaker = self.safe_string(trade, 'role')
-        price = self.safe_float(trade, 'price')
+        price = self.safe_float_2(trade, 'price', 'trade_price')
         amount = self.safe_float_2(trade, 'filled-amount', 'amount')
+        amount = self.safe_float(trade, 'trade_volume', amount)
         cost = None
-        if price is not None:
+        if market is not None and market['type'] != 'spot':
+            cost = self.safe_float(trade, 'trade_turnover')
+        elif price is not None:
             if amount is not None:
                 cost = amount * price
         fee = None
-        feeCost = self.safe_float(trade, 'filled-fees')
+        feeCost = self.safe_float_2(trade, 'filled-fees', 'trade_fee')
         feeCurrency = None
         if market is not None:
             feeCurrency = market['base'] if (side == 'buy') else market['quote']
@@ -595,18 +782,39 @@ class huobipro(Exchange):
 
     async def fetch_my_trades(self, symbol=None, since=None, limit=None, params={}):
         await self.load_markets()
-        market = None
+        market = self.market(symbol)
         request = {}
-        if symbol is not None:
-            market = self.market(symbol)
-            request['symbol'] = market['id']
+        type = market['type']
+        method = ''
+        if type == 'spot':
+            if symbol is not None:
+                market = self.market(symbol)
+                request['symbol'] = market['id']
+            if limit is not None:
+                request['size'] = limit  # 1-100 orders, default is 100
+            if since is not None:
+                request['start-date'] = self.ymd(since)  # maximum query window size is 2 days, query window shift should be within past 120 days
+            response = await self.privateGetOrderMatchresults(self.extend(request, params))
+            trades = self.parse_trades(response['data'], market, since, limit)
+            return trades
+        elif type == 'futures':
+            request['symbol'] = market['base']
+            method = 'futuresPrivatePostV1ContractOrderDetail'
+        else:
+            request['contract_code'] = symbol
+            if market['quote'] == 'USDT':
+                method = 'usdtSwapPrivatePostV1SwapOrderDetail'
+            else:
+                method = 'swapPrivatePostV1SwapOrderDetail'
+        orderId = self.safe_string_2(params, 'order_id', 'id')
+        self.omit(params, 'order_id', 'id')
+        if orderId is not None:
+            request['order_id'] = orderId
         if limit is not None:
-            request['size'] = limit  # 1-100 orders, default is 100
-        if since is not None:
-            request['start-date'] = self.ymd(since)  # maximum query window size is 2 days, query window shift should be within past 120 days
-        response = await self.privateGetOrderMatchresults(self.extend(request, params))
-        trades = self.parse_trades(response['data'], market, since, limit)
-        return trades
+            request['page_size'] = limit
+        response = await getattr(self, method)(self.extend(request, params))
+        trades = self.safe_value(response['data'], 'trades', [])
+        return self.parse_trades(trades, market, since, limit)
 
     async def fetch_trades(self, symbol, since=None, limit=1000, params={}):
         await self.load_markets()
@@ -676,13 +884,31 @@ class huobipro(Exchange):
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=1000, params={}):
         await self.load_markets()
         market = self.market(symbol)
-        request = {
-            'symbol': market['id'],
-            'period': self.timeframes[timeframe],
-        }
+        type = market['type']
+        request = {}
+        method = ''
+        if type == 'spot':
+            request = {
+                'symbol': market['id'],
+                'period': self.timeframes[timeframe],
+            }
+            method = 'marketGetHistoryKline'
+        else:
+            request = {
+                'contract_code': market['id'],
+                'period': self.timeframes[timeframe],
+            }
+            if type == 'futures':
+                method = 'futuresMarketGetHistoryKline'
+            elif market['quote'] == 'USDT':
+                method = 'usdtSwapMarketGetMarketHistoryKline'
+            else:
+                method = 'swapMarketGetHistoryKline'
         if limit is not None:
             request['size'] = limit
-        response = await self.marketGetHistoryKline(self.extend(request, params))
+        if since is not None:
+            request['from'] = int(since / 1000)
+        response = await getattr(self, method)(self.extend(request, params))
         #
         #     {
         #         "status":"ok",
@@ -778,39 +1004,77 @@ class huobipro(Exchange):
     async def fetch_balance(self, params={}):
         await self.load_markets()
         await self.load_accounts()
-        method = self.options['fetchBalanceMethod']
-        request = {
-            'id': self.accounts[0]['id'],
-        }
+        type = self.safe_string(params, 'type', 'spot')
+        quote = self.safe_string(params, 'quote', '')
+        method = ''
+        request = {}
+        if type == 'spot':
+            request = {
+                'id': self.accounts[0]['id'],
+            }
+            method = self.options['fetchBalanceMethod']
+        elif type == 'futures':
+            method = 'futuresPrivatePostV1ContractAccountInfo'
+        elif quote == 'USDT':
+            method = 'usdtSwapPrivatePostV1SwapAccountInfo'
+        else:
+            method = 'swapPrivatePostV1SwapAccountInfo'
         response = await getattr(self, method)(self.extend(request, params))
         balances = self.safe_value(response['data'], 'list', [])
+        if type != 'spot':
+            balances = self.safe_value(response, 'data', [])
         result = {'info': response}
         for i in range(0, len(balances)):
             balance = balances[i]
-            currencyId = self.safe_string(balance, 'currency')
-            code = self.safe_currency_code(currencyId)
-            account = None
-            if code in result:
-                account = result[code]
+            if type == 'spot':
+                currencyId = self.safe_string(balance, 'currency')
+                code = self.safe_currency_code(currencyId)
+                account = None
+                if code in result:
+                    account = result[code]
+                else:
+                    account = self.account()
+                if balance['type'] == 'trade':
+                    account['free'] = self.safe_float_2(balance, 'balance')
+                if balance['type'] == 'frozen':
+                    account['used'] = self.safe_float_2(balance, 'balance')
+                result[code] = account
             else:
-                account = self.account()
-            if balance['type'] == 'trade':
-                account['free'] = self.safe_float(balance, 'balance')
-            if balance['type'] == 'frozen':
-                account['used'] = self.safe_float(balance, 'balance')
-            result[code] = account
+                account = {}
+                code = None
+                if type == 'futures' and quote == 'USDT':
+                    code = self.safe_string(balance, 'contract_code')
+                else:
+                    code = self.safe_string(balance, 'symbol')
+                account['free'] = self.safe_float(balance, 'margin_available')
+                account['total'] = self.safe_float(balance, 'margin_balance')
+                result[code] = account
         return self.parse_balance(result)
 
     async def fetch_orders_by_states(self, states, symbol=None, since=None, limit=None, params={}):
         await self.load_markets()
-        request = {
-            'states': states,
-        }
-        market = None
-        if symbol is not None:
-            market = self.market(symbol)
+        market = self.market(symbol)
+        type = market['type']
+        method = None
+        request = {}
+        if type == 'spot':
             request['symbol'] = market['id']
-        method = self.safe_string(self.options, 'fetchOrdersByStatesMethod', 'private_get_order_orders')
+            request['states'] = states
+            method = self.safe_string(self.options, 'fetchOrdersByStatesMethod', 'private_get_order_orders')
+        else:
+            request['contract_code'] = symbol
+            request['trade_type'] = 0
+            request['type'] = 1
+            request['create_date'] = 90
+            request['page_size'] = 50
+            request['status'] = states
+            if type == 'futures':
+                request['symbol'] = market['base']
+                method = 'futuresPrivatePostV1ContractHisorders'
+            elif market['quote'] == 'USDT':
+                method = 'usdtSwapPrivatePostV1SwapHisorders'
+            else:
+                method = 'swapPrivatePostV1SwapHisorders'
         response = await getattr(self, method)(self.extend(request, params))
         #
         #     {status:   "ok",
@@ -829,23 +1093,57 @@ class huobipro(Exchange):
         #                                 state: "filled",
         #                         'canceled-at':  0                      }  ]}
         #
-        return self.parse_orders(response['data'], market, since, limit)
+        if type == 'spot':
+            return self.parse_orders(response['data'], market, since, limit)
+        else:
+            return self.parse_orders(response['data']['orders'], market, since, limit)
 
     async def fetch_order(self, id, symbol=None, params={}):
         await self.load_markets()
-        request = {
-            'id': id,
-        }
-        response = await self.privateGetOrderOrdersId(self.extend(request, params))
+        market = self.market(symbol)
+        type = market['type']
+        request = {}
+        method = None
+        if type == 'spot':
+            request['id'] = id
+            method = 'privateGetOrderOrdersId'
+        elif id:
+            request['order_id'] = id
+        if type == 'futures':
+            request['symbol'] = market['base']
+            method = 'futuresPrivatePostV1ContractOrderInfo'
+        elif type == 'swap' and market['quote'] == 'USDT':
+            request['contract_code'] = symbol
+            method = 'usdtSwapPrivatePostV1SwapOrderInfo'
+        else:
+            request['contract_code'] = symbol
+            method = 'swapPrivatePostV1SwapOrderInfo'
+        response = await getattr(self, method)(self.extend(request, params))
         order = self.safe_value(response, 'data')
-        return self.parse_order(order)
+        if type == 'spot':
+            return self.parse_order(order)
+        else:
+            if len(order) <= 0:
+                raise OrderNotFound()
+            elif len(order) == 1:
+                return self.parse_order(order[0])
+            else:
+                result = []
+                for i in range(0, len(order)):
+                    result.append(self.parse_order(order[i]))
+                return result
 
     async def fetch_orders(self, symbol=None, since=None, limit=None, params={}):
         return await self.fetch_orders_by_states('pre-submitted,submitted,partial-filled,filled,partial-canceled,canceled', symbol, since, limit, params)
 
     async def fetch_open_orders(self, symbol=None, since=None, limit=None, params={}):
-        method = self.safe_string(self.options, 'fetchOpenOrdersMethod', 'fetch_open_orders_v1')
-        return await getattr(self, method)(symbol, since, limit, params)
+        await self.load_markets()
+        market = self.market(symbol)
+        if market['type'] == 'spot':
+            method = self.safe_string(self.options, 'fetchOpenOrdersMethod', 'fetch_open_orders_v1')
+            return await getattr(self, method)(symbol, since, limit, params)
+        else:
+            return await self.fetch_orders_by_states('3,4', symbol, since, limit, params)
 
     async def fetch_open_orders_v1(self, symbol=None, since=None, limit=None, params={}):
         if symbol is None:
@@ -909,6 +1207,14 @@ class huobipro(Exchange):
             'filled': 'closed',
             'canceled': 'canceled',
             'submitted': 'open',
+            '1': 'open',
+            '2': 'open',
+            '3': 'open',
+            '4': 'open',
+            '5': 'canceled',
+            '6': 'closed',
+            '7': 'canceled',
+            '11': 'canceling',
         }
         return self.safe_string(statuses, status, status)
 
@@ -944,7 +1250,8 @@ class huobipro(Exchange):
         #                     state: "filled",
         #             'canceled-at':  0                      }
         #
-        id = self.safe_string(order, 'id')
+        id = self.safe_string_2(order, 'id', 'order_id')
+        clientOrderId = self.safe_string(order, 'client_order_id')
         side = None
         type = None
         status = None
@@ -953,6 +1260,16 @@ class huobipro(Exchange):
             side = orderType[0]
             type = orderType[1]
             status = self.parse_order_status(self.safe_string(order, 'state'))
+        else:
+            side = self.safe_string(order, 'direction')
+            price_type = self.safe_string(order, 'order_price_type')
+            price_type_map = {
+                '1': 'limit',
+                '2': 'market',
+                '9': 'market',
+            }
+            type = self.safe_string(price_type_map, price_type)
+            status = self.parse_order_status(self.safe_string(order, 'status'))
         symbol = None
         if market is None:
             if 'symbol' in order:
@@ -961,15 +1278,18 @@ class huobipro(Exchange):
                     market = self.markets_by_id[marketId]
         if market is not None:
             symbol = market['symbol']
-        timestamp = self.safe_integer(order, 'created-at')
-        amount = self.safe_float(order, 'amount')
+        timestamp = self.safe_integer_2(order, 'created-at', 'create_date')
+        timestamp = self.safe_integer(order, 'created_at', timestamp)
+        amount = self.safe_float_2(order, 'amount', 'volume')
         filled = self.safe_float_2(order, 'filled-amount', 'field-amount')  # typo in their API, filled amount
+        filled = self.safe_float(order, 'trade_volume', filled)
         if (type == 'market') and (side == 'buy'):
             amount = filled if (status == 'closed') else None
         price = self.safe_float(order, 'price')
         if price == 0.0:
             price = None
         cost = self.safe_float_2(order, 'filled-cash-amount', 'field-cash-amount')  # same typo
+        cost = self.safe_float(order, 'trade_turnover', cost)
         remaining = None
         average = None
         if filled is not None:
@@ -978,7 +1298,10 @@ class huobipro(Exchange):
             # if cost is defined and filled is not zero
             if (cost is not None) and (filled > 0):
                 average = cost / filled
+        if type != 'spot':
+            average = self.safe_float(order, 'trade_avg_price')
         feeCost = self.safe_float_2(order, 'filled-fees', 'field-fees')  # typo in their API, filled fees
+        feeCost = self.safe_float(order, 'fee', feeCost)
         fee = None
         if feeCost is not None:
             feeCurrency = None
@@ -991,7 +1314,7 @@ class huobipro(Exchange):
         return {
             'info': order,
             'id': id,
-            'clientOrderId': None,
+            'clientOrderId': clientOrderId,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
             'lastTradeTimestamp': None,
@@ -1011,34 +1334,59 @@ class huobipro(Exchange):
 
     async def create_order(self, symbol, type, side, amount, price=None, params={}):
         await self.load_markets()
-        await self.load_accounts()
         market = self.market(symbol)
-        request = {
-            'account-id': self.accounts[0]['id'],
-            'symbol': market['id'],
-            'type': side + '-' + type,
-        }
-        if (type == 'market') and (side == 'buy'):
-            if self.options['createMarketBuyOrderRequiresPrice']:
-                if price is None:
-                    raise InvalidOrder(self.id + " market buy order requires price argument to calculate cost(total amount of quote currency to spend for buying, amount * price). To switch off self warning exception and specify cost in the amount argument, set .options['createMarketBuyOrderRequiresPrice'] = False. Make sure you know what you're doing.")
+        request = {}
+        method = ''
+        if market['spot'] is True:
+            await self.load_accounts()
+            request = {
+                'account-id': self.accounts[0]['id'],
+                'symbol': market['id'],
+                'type': side + '-' + type,
+            }
+            if (type == 'market') and (side == 'buy'):
+                if self.options['createMarketBuyOrderRequiresPrice']:
+                    if price is None:
+                        raise InvalidOrder(self.id + " market buy order requires price argument to calculate cost(total amount of quote currency to spend for buying, amount * price). To switch off self warning exception and specify cost in the amount argument, set .options['createMarketBuyOrderRequiresPrice'] = False. Make sure you know what you're doing.")
+                    else:
+                        # despite that cost = amount * price is in quote currency and should have quote precision
+                        # the exchange API requires the cost supplied in 'amount' to be of base precision
+                        # more about it here: https://github.com/ccxt/ccxt/pull/4395
+                        # we use priceToPrecision instead of amountToPrecision here
+                        # because in self case the amount is in the quote currency
+                        request['amount'] = self.cost_to_precision(symbol, float(amount) * float(price))
                 else:
-                    # despite that cost = amount * price is in quote currency and should have quote precision
-                    # the exchange API requires the cost supplied in 'amount' to be of base precision
-                    # more about it here: https://github.com/ccxt/ccxt/pull/4395
-                    # we use priceToPrecision instead of amountToPrecision here
-                    # because in self case the amount is in the quote currency
-                    request['amount'] = self.cost_to_precision(symbol, float(amount) * float(price))
+                    request['amount'] = self.cost_to_precision(symbol, amount)
             else:
-                request['amount'] = self.cost_to_precision(symbol, amount)
+                request['amount'] = self.amount_to_precision(symbol, amount)
+            if type == 'limit' or type == 'ioc' or type == 'limit-maker':
+                request['price'] = self.price_to_precision(symbol, price)
+            method = self.options['createOrderMethod']
         else:
-            request['amount'] = self.amount_to_precision(symbol, amount)
-        if type == 'limit' or type == 'ioc' or type == 'limit-maker':
-            request['price'] = self.price_to_precision(symbol, price)
-        method = self.options['createOrderMethod']
+            request = {
+                'contract_code': symbol,
+                'order_price_type': type,
+                'volume': amount,
+                'direction': side,
+            }
+            if type == 'market':
+                request['order_price_type'] = 'optimal_20'
+            else:
+                request['price'] = self.price_to_precision(symbol, price)
+            if market['type'] == 'futures':
+                method = 'futuresPrivatePostV1ContractOrder'
+            elif market['quote'] == 'USDT':
+                method = 'usdtSwapPrivatePostV1SwapOrder'
+            else:
+                method = 'swapPrivatePostV1SwapOrder'
         response = await getattr(self, method)(self.extend(request, params))
         timestamp = self.milliseconds()
-        id = self.safe_string(response, 'data')
+        id = None
+        if market['type'] == 'spot':
+            id = self.safe_string(response, 'data')
+        else:
+            data = self.safe_value(response, 'data', {})
+            id = self.safe_string(data, 'order_id_str')
         return {
             'info': response,
             'id': id,
@@ -1061,7 +1409,27 @@ class huobipro(Exchange):
         }
 
     async def cancel_order(self, id, symbol=None, params={}):
-        response = await self.privatePostOrderOrdersIdSubmitcancel({'id': id})
+        await self.load_markets()
+        market = self.market(symbol)
+        type = market['type']
+        request = {}
+        method = ''
+        if type == 'spot':
+            request['id'] = id
+            method = 'privatePostOrderOrdersIdSubmitcancel'
+        else:
+            if id is not None:
+                request['order_id'] = id
+            if type == 'futures':
+                request['symbol'] = market['base']
+                method = 'futuresPrivatePostV1ContractCancel'
+            elif type == 'swap' and market['quote'] == 'USDT':
+                request['contract_code'] = symbol
+                method = 'usdtSwapPrivatePostV1SwapCancel'
+            else:
+                request['contract_code'] = symbol
+                method = 'swapPrivatePostV1SwapCancel'
+        response = await getattr(self, method)(self.extend(request, params))
         #
         #     response = {
         #         'status': 'ok',
@@ -1290,9 +1658,19 @@ class huobipro(Exchange):
             url += self.version
         elif (api == 'v2Public') or (api == 'v2Private'):
             url += 'v2'
+        elif api == 'futuresPrivate' or api == 'futuresPublic':
+            url += 'api'
+        elif api == 'swapPrivate' or api == 'swapPublic':
+            url += 'swap-api'
+        elif api == 'usdtSwapPrivate' or api == 'usdtSwapPublic':
+            url += 'linear-swap-api'
+        elif api == 'usdtSwapMarket':
+            url += 'linear-swap-ex'
+        elif api == 'swapMarket':
+            url += ''
         url += '/' + self.implode_params(path, params)
         query = self.omit(params, self.extract_params(path))
-        if api == 'private' or api == 'v2Private':
+        if api == 'private' or api == 'v2Private' or api == 'futuresPrivate' or api == 'swapPrivate' or api == 'usdtSwapPrivate':
             self.check_required_credentials()
             timestamp = self.ymdhms(self.milliseconds(), 'T')
             request = {
@@ -1306,8 +1684,10 @@ class huobipro(Exchange):
             request = self.keysort(request)
             auth = self.urlencode(request)
             # unfortunately, PHP demands double quotes for the escaped newline symbol
+            apiurl = self.urls.api[api]
+            hostname = apiurl.replace('http://', '').replace('https://', '')
             # eslint-disable-next-line quotes
-            payload = "\n".join([method, self.hostname, url, auth])
+            payload = "\n".join([method, hostname, url, auth])
             signature = self.hmac(self.encode(payload), self.encode(self.secret), hashlib.sha256, 'base64')
             auth += '&' + self.urlencode({'Signature': signature})
             url += '?' + auth
