@@ -1044,7 +1044,7 @@ class huobipro(Exchange):
             else:
                 account = {}
                 code = None
-                if type == 'futures' and quote == 'USDT':
+                if type == 'swap' and quote == 'USDT':
                     code = self.safe_string(balance, 'contract_code')
                 else:
                     code = self.safe_string(balance, 'symbol')

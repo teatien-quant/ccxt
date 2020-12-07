@@ -1105,7 +1105,7 @@ class huobipro extends Exchange {
             } else {
                 $account = array();
                 $code = null;
-                if ($type === 'futures' && $quote === 'USDT') {
+                if ($type === 'swap' && $quote === 'USDT') {
                     $code = $this->safe_string($balance, 'contract_code');
                 } else {
                     $code = $this->safe_string($balance, 'symbol');
