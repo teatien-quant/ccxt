@@ -1100,7 +1100,7 @@ module.exports = class huobipro extends Exchange {
             } else {
                 const account = {};
                 let code = undefined;
-                if (type === 'futures' && quote === 'USDT') {
+                if (type === 'swap' && quote === 'USDT') {
                     code = this.safeString (balance, 'contract_code');
                 } else {
                     code = this.safeString (balance, 'symbol');
