@@ -460,7 +460,7 @@ module.exports = class huobipro extends Exchange {
                 'amount': 1,
                 'price': this.safeFloat (market, 'price_tick'),
             };
-            active = this.safeFloat (market, 'contract_status') === 1;
+            active = this.safeInteger (market, 'contract_status') === 1;
         }
         const maker = (base === 'OMG') ? 0 : 0.2 / 100;
         const taker = (base === 'OMG') ? 0 : 0.2 / 100;
@@ -1105,7 +1105,7 @@ module.exports = class huobipro extends Exchange {
                 } else {
                     code = this.safeString (balance, 'symbol');
                 }
-                account['free'] = this.safeFloat (balance, 'margin_available');
+                account['used'] = this.safeFloat (balance, 'margin_available');
                 account['total'] = this.safeFloat (balance, 'margin_balance');
                 result[code] = account;
             }
