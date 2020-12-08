@@ -465,7 +465,7 @@ class huobipro extends Exchange {
                 'amount' => 1,
                 'price' => $this->safe_float($market, 'price_tick'),
             );
-            $active = $this->safe_float($market, 'contract_status') === 1;
+            $active = $this->safe_integer($market, 'contract_status') === 1;
         }
         $maker = ($base === 'OMG') ? 0 : 0.2 / 100;
         $taker = ($base === 'OMG') ? 0 : 0.2 / 100;
@@ -1110,7 +1110,7 @@ class huobipro extends Exchange {
                 } else {
                     $code = $this->safe_string($balance, 'symbol');
                 }
-                $account['free'] = $this->safe_float($balance, 'margin_available');
+                $account['used'] = $this->safe_float($balance, 'margin_available');
                 $account['total'] = $this->safe_float($balance, 'margin_balance');
                 $result[$code] = $account;
             }

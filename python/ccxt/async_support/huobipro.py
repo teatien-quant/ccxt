@@ -461,7 +461,7 @@ class huobipro(Exchange):
                 'amount': 1,
                 'price': self.safe_float(market, 'price_tick'),
             }
-            active = self.safe_float(market, 'contract_status') == 1
+            active = self.safe_integer(market, 'contract_status') == 1
         maker = 0 if (base == 'OMG') else 0.2 / 100
         taker = 0 if (base == 'OMG') else 0.2 / 100
         minAmount = self.safe_float(market, 'min-order-amt', math.pow(10, -precision['amount']))
@@ -1048,7 +1048,7 @@ class huobipro(Exchange):
                     code = self.safe_string(balance, 'contract_code')
                 else:
                     code = self.safe_string(balance, 'symbol')
-                account['free'] = self.safe_float(balance, 'margin_available')
+                account['used'] = self.safe_float(balance, 'margin_available')
                 account['total'] = self.safe_float(balance, 'margin_balance')
                 result[code] = account
         return self.parse_balance(result)
